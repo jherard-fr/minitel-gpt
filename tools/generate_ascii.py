@@ -1,84 +1,91 @@
 #!/usr/bin/env python3
 """
 Convertit jim.jpg en ASCII art 40 colonnes pour Minitel.
-Usage : python3 generate_ascii.py
-Sortie : affiche l'ASCII art + génère jim_ascii.py
+v2 — zoom sur le visage + contraste amélioré
 """
-import sys
+import sys, os
 try:
-    from PIL import Image
+    from PIL import Image, ImageEnhance, ImageFilter
 except ImportError:
     import subprocess
     subprocess.check_call([sys.executable, "-m", "pip", "install", "Pillow",
                            "--break-system-packages", "-q"])
-    from PIL import Image
+    from PIL import Image, ImageEnhance, ImageFilter
 
-import os
-
-# Chemin de l'image
 IMG_PATH = os.path.join(os.path.dirname(__file__), "..", "jim.jpg")
 OUT_PATH = os.path.join(os.path.dirname(__file__), "..", "services", "jim_ascii.py")
 
-# Dimensions Minitel : 40 colonnes, on laisse 4 lignes pour header/footer
 COLS = 40
-ROWS = 20
+ROWS = 22
 
-# Caractères du plus foncé au plus clair (adapté Minitel 7-bit ASCII)
-# Densité visuelle décroissante
-CHARS = "@%#*+=-:. "
+# Palette plus riche : 14 niveaux du plus sombre au plus clair
+# Les caractères denses = zones sombres (barbe, lunettes, casquette)
+# Les caractères légers = zones claires (peau, ciel)
+CHARS = "@#MW8Boar*+=- ."
 
 def brightness_to_char(b: int) -> str:
-    """Convertit une luminosité 0-255 en caractère ASCII."""
     idx = int(b / 255 * (len(CHARS) - 1))
     return CHARS[idx]
 
 def image_to_ascii(path: str, cols: int, rows: int) -> list[str]:
-    img = Image.open(path).convert("L")  # Niveaux de gris
-
-    # Recadrer sur la partie haute (visage) — 80% de l'image
+    img = Image.open(path).convert("RGB")
     w, h = img.size
-    crop_h = int(h * 0.88)
-    img = img.crop((0, 0, w, crop_h))
 
-    # Les caractères ASCII sont environ 2× plus hauts que larges
-    # → doubler le nombre de lignes pour compenser l'aspect ratio
-    img = img.resize((cols, rows * 2), Image.LANCZOS)
+    # ── Zoom sur le visage ────────────────────────────────────────────────
+    # La photo est un selfie portrait : le visage occupe toute la hauteur.
+    # On coupe ~8% en haut (ciel pur) et ~5% en bas (épaules/sac)
+    # et on resserre horizontalement pour centrer le visage.
+    crop = img.crop((
+        int(w * 0.05),   # gauche : couper le bord
+        int(h * 0.00),   # haut   : garder la casquette
+        int(w * 0.95),   # droite : couper le bord
+        int(h * 0.90),   # bas    : couper épaules
+    ))
 
-    # Sous-échantillonner verticalement (garder 1 ligne sur 2)
+    # ── Amélioration contraste et netteté ─────────────────────────────────
+    crop = ImageEnhance.Contrast(crop).enhance(1.8)
+    crop = ImageEnhance.Sharpness(crop).enhance(2.0)
+    crop = ImageEnhance.Brightness(crop).enhance(1.1)
+    crop = crop.convert("L")  # Niveaux de gris après amélioration couleur
+
+    # Égalisation d'histogramme manuelle pour maximiser la plage de gris
+    # → les détails du visage ressortent mieux
+    from PIL import ImageOps
+    crop = ImageOps.autocontrast(crop, cutoff=3)
+
+    # Redimensionner — les chars ASCII sont ~2x plus hauts que larges
+    # On compense en demandant rows*2 puis sous-échantillonnage vertical
+    crop = crop.resize((cols, rows * 2), Image.LANCZOS)
+
     lines = []
     for row in range(rows):
         line = ""
         for col in range(cols):
-            b = img.getpixel((col, row * 2))
+            b = crop.getpixel((col, row * 2))
             line += brightness_to_char(b)
         lines.append(line)
     return lines
 
 def main():
-    print(f"Conversion de {IMG_PATH}...")
+    print(f"Conversion de {IMG_PATH} (v2 — zoom visage)...")
     lines = image_to_ascii(IMG_PATH, COLS, ROWS)
 
-    # Affichage preview
     print("\n" + "=" * COLS)
     for line in lines:
         print(line)
     print("=" * COLS + "\n")
 
-    # Génération du fichier Python
     escaped = [repr(line) for line in lines]
-    content = f'''# Auto-généré par generate_ascii.py — portrait de Jim pour le Minitel
+    content = f'''# Auto-généré par generate_ascii.py v2 — portrait de Jim
 JIM_ASCII = [
 {chr(10).join("    " + e + "," for e in escaped)}
 ]
 
-# Label affiché sous le portrait
 JIM_LABEL = "*** BON ANNIVERSAIRE JIM ! ***"
 '''
     with open(OUT_PATH, "w") as f:
         f.write(content)
-
-    print(f"Fichier généré : {OUT_PATH}")
-    print(f"Dimensions : {COLS}×{len(lines)} caractères")
+    print(f"Généré : {OUT_PATH} ({COLS}x{len(lines)})")
 
 if __name__ == "__main__":
     main()
