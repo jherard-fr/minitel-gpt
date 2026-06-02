@@ -46,10 +46,11 @@ def wait_for_ip(timeout: int = 60) -> str | None:
 
 
 def send_email(ip: str):
-    body_text = f"{HOSTNAME} est disponible\n\nHTTP : http://{ip}\nSSH  : ssh minitel@{ip}\n"
+    admin_url = f"http://{ip}:8080"
+    body_text = f"{HOSTNAME} est disponible\n\nAdmin : {admin_url}\nSSH   : ssh minitel@{ip}\n"
     body_html = f"""<h2>{HOSTNAME} est disponible</h2>
-<p><b>HTTP :</b> <a href="http://{ip}">http://{ip}</a></p>
-<p><b>SSH  :</b> <code>ssh minitel@{ip}</code></p>"""
+<p><b>Admin :</b> <a href="{admin_url}">{admin_url}</a> (mot de passe : 13100)</p>
+<p><b>SSH   :</b> <code>ssh minitel@{ip}</code></p>"""
 
     resp = requests.post(
         "https://api.resend.com/emails",
