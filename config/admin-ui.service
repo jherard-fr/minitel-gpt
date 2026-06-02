@@ -1,0 +1,17 @@
+[Unit]
+Description=MinitelGPT Admin UI (port 8080)
+After=network.target
+
+[Service]
+Type=simple
+User=minitel
+WorkingDirectory=/home/minitel/minitel-gpt
+EnvironmentFile=/home/minitel/minitel-gpt/.env
+ExecStart=/usr/bin/python3 /home/minitel/minitel-gpt/services/admin_ui.py
+Restart=on-failure
+RestartSec=5
+StandardOutput=append:/home/minitel/minitel-gpt/logs/admin.log
+StandardError=append:/home/minitel/minitel-gpt/logs/admin.log
+
+[Install]
+WantedBy=multi-user.target
