@@ -84,9 +84,35 @@ def scan_networks() -> list[dict]:
     return sorted(networks, key=lambda n: -n["signal"])
 
 
+def client_wifi_connections():
+    """Liste les noms des profils WiFi client (hors hotspot)."""
+    r = run(["nmcli", "-t", "-f", "NAME,TYPE", "con", "show"], check=False)
+    names = []
+    for line in r.stdout.splitlines():
+        parts = line.split(":")
+        if len(parts) >= 2 and "wireless" in parts[1] and parts[0] != AP_CON_NAME:
+            names.append(parts[0])
+    return names
+
+
+def set_clients_autoconnect(enabled: bool):
+    """Active/désactive l'autoconnect de tous les réseaux clients."""
+    val = "yes" if enabled else "no"
+    for name in client_wifi_connections():
+        run(["nmcli", "con", "modify", name, "connection.autoconnect", val], check=False)
+
+
 def create_hotspot():
     log.info(f"Création hotspot {AP_SSID}")
-    # Supprimer une éventuelle connexion précédente
+    # 1. Empêcher NetworkManager de reprendre wlan0 avec un réseau connu :
+    #    désactiver l'autoconnect des clients et les déconnecter.
+    set_clients_autoconnect(False)
+    for name in client_wifi_connections():
+        run(["nmcli", "con", "down", name], check=False)
+    time.sleep(1)
+
+    # 2. (Re)créer le profil AP — réseau OUVERT (sans mot de passe) pour
+    #    faciliter la connexion au portail de configuration.
     run(["nmcli", "con", "delete", AP_CON_NAME], check=False)
     run([
         "nmcli", "con", "add",
@@ -97,20 +123,20 @@ def create_hotspot():
         "ssid", AP_SSID,
         "802-11-wireless.band", "bg",
         "802-11-wireless.channel", "6",
-        "wifi-sec.key-mgmt", "wpa-psk",
-        "wifi-sec.psk", AP_PASSWORD,
         "ipv4.method", "shared",
         "ipv4.addresses", f"{AP_IP}/24",
         "ipv6.method", "disabled",
         "autoconnect", "no",
     ], check=True)
     run(["nmcli", "con", "up", AP_CON_NAME], check=True)
-    log.info(f"Hotspot actif sur {AP_IP}")
+    log.info(f"Hotspot OUVERT actif sur {AP_IP}")
 
 
 def stop_hotspot():
     log.info("Arrêt hotspot")
     run(["nmcli", "con", "down", AP_CON_NAME], check=False)
+    # Réactiver l'autoconnect des clients pour qu'ils se reconnectent
+    set_clients_autoconnect(True)
 
 
 def connect_wifi(ssid: str, password: str) -> tuple[bool, str]:
