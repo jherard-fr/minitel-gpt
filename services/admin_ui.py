@@ -234,6 +234,16 @@ pre{background:#0d0d1a;padding:10px;border-radius:4px;font-size:.72em;max-height
     </form>
   </div>
 
+  <div class=card>
+    <h2>Email de notification</h2>
+    <form method=POST action=/save-mail>
+      <p class=muted>Reçoit l'adresse IP du Minitel au démarrage / après config WiFi.</p>
+      <label>Adresse email</label>
+      <input type=text name=mail_to value="{{mail_to}}" placeholder="vous@exemple.com">
+      <button class="btn btn-p">Enregistrer l'email</button>
+    </form>
+  </div>
+
   <div class="card full">
     <h2>Logs terminal <a href=/ class=muted>rafraîchir</a></h2>
     <pre>{{log_chatgpt}}</pre>
@@ -293,7 +303,8 @@ def index():
         ADMIN_HTML, presets=data["presets"], active_key=ak,
         active_label=active.get("label", ak), active=merged,
         services=services, log_chatgpt=log_tail("chatgpt"),
-        key_masked=masked, flash=flash, flash_ok=flash_ok)
+        key_masked=masked, mail_to=read_env().get("MAIL_TO", ""),
+        flash=flash, flash_ok=flash_ok)
 
 @app.route("/apply-preset", methods=["POST"])
 @require_login
@@ -386,6 +397,20 @@ def save_key():
     else:
         session["flash"] = "Clé vide."; session["flash_ok"] = False
     return redirect(url_for("index"))
+
+@app.route("/save-mail", methods=["POST"])
+@require_login
+def save_mail():
+    mail = request.form.get("mail_to", "").strip()
+    if mail and "@" in mail:
+        write_env_key("MAIL_TO", mail)
+        restart_terminal()
+        session["flash"] = f"Email de notification : {mail}"
+        session["flash_ok"] = True
+    else:
+        session["flash"] = "Adresse email invalide."; session["flash_ok"] = False
+    return redirect(url_for("index"))
+
 
 @app.route("/restart", methods=["POST"])
 @require_login

@@ -243,19 +243,22 @@ HTML = """<!DOCTYPE html>
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>MinitelGPT — Configuration WiFi</title>
 <style>
-  body { font-family: monospace; background: #1a1a2e; color: #e0e0e0; margin: 0; padding: 20px; }
-  h1 { color: #00ff88; font-size: 1.4em; }
+  * { box-sizing: border-box; }
+  body { font-family: monospace; background: #1a1a2e; color: #e0e0e0; margin: 0; padding: 20px;
+    max-width: 600px; margin: 0 auto; }
+  h1 { color: #00ff88; font-size: 1.3em; }
   .card { background: #16213e; border: 1px solid #0f3460; border-radius: 8px; padding: 16px; margin: 12px 0; }
   .network { cursor: pointer; padding: 10px; border-radius: 4px; margin: 4px 0; border: 1px solid #0f3460; }
   .network:hover { background: #0f3460; }
   .network.selected { border-color: #00ff88; }
   .signal { float: right; color: #888; }
   .security { font-size: 0.8em; color: #aaa; }
-  input[type=password] { width: 100%; padding: 8px; background: #0f3460; border: 1px solid #00ff88;
-    color: #e0e0e0; border-radius: 4px; box-sizing: border-box; margin-top: 8px; font-family: monospace; }
+  input[type=password] { width: 100%; padding: 10px; background: #0f3460; border: 1px solid #00ff88;
+    color: #e0e0e0; border-radius: 4px; box-sizing: border-box; margin-top: 8px; font-family: monospace;
+    font-size: 16px; }
   button { background: #00ff88; color: #1a1a2e; border: none; padding: 10px 24px;
     border-radius: 4px; cursor: pointer; font-weight: bold; margin-top: 10px; font-size: 1em; }
   button:hover { background: #00cc66; }
