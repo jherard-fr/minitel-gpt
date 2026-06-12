@@ -12,9 +12,10 @@ import sys
 from pathlib import Path
 from functools import wraps
 from flask import (Flask, render_template_string, request, redirect,
-                   url_for, session, jsonify)
+                   url_for, session, jsonify, send_from_directory)
 
 PROJ_DIR = Path(__file__).parent.parent
+ASSETS_DIR = PROJ_DIR / "assets"
 PROMPTS_FILE = PROJ_DIR / "config" / "prompts.json"
 ENV_FILE = PROJ_DIR / ".env"
 LOGS_DIR = PROJ_DIR / "logs"
@@ -128,18 +129,24 @@ def generate_prompt(description):
 # ── Templates ────────────────────────────────────────────────────────────
 LOGIN_HTML = """<!DOCTYPE html><html lang=fr><head><meta charset=UTF-8>
 <meta name=viewport content="width=device-width,initial-scale=1"><title>MinitelGPT Admin</title>
+<link rel=icon type=image/png sizes=32x32 href=/assets/favicon-32.png>
+<link rel=apple-touch-icon href=/assets/apple-touch-icon-180.png>
 <style>body{background:#0d0d1a;color:#e0e0e0;font-family:'Courier New',monospace;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}
 .box{background:#1a1a2e;border:2px solid #00ff88;border-radius:8px;padding:40px;width:340px;text-align:center}
-h1{color:#00ff88;font-size:1.3em}input{width:100%;padding:10px;background:#0d0d1a;border:1px solid #00ff88;color:#e0e0e0;border-radius:4px;text-align:center;letter-spacing:.2em;box-sizing:border-box}
+.box img{width:160px;height:auto;margin-bottom:8px}
+input{width:100%;padding:10px;background:#0d0d1a;border:1px solid #00ff88;color:#e0e0e0;border-radius:4px;text-align:center;letter-spacing:.2em;box-sizing:border-box}
 button{width:100%;margin-top:12px;padding:12px;background:#00ff88;color:#0d0d1a;border:none;border-radius:4px;font-weight:bold;cursor:pointer}
 .err{color:#ff4444;margin-top:10px}</style></head><body>
-<div class=box><div style="font-size:2em">🖥</div><h1>MINITEL GPT</h1>
+<div class=box><img src=/assets/logo-minitel-gpt.png alt="MINITEL GPT">
 <form method=POST><input type=password name=password placeholder="••••••" autofocus>
 <button>Entrer</button></form>{% if error %}<div class=err>{{error}}</div>{% endif %}</div></body></html>"""
 
 ADMIN_HTML = """<!DOCTYPE html><html lang=fr><head><meta charset=UTF-8>
 <meta name=viewport content="width=device-width,initial-scale=1"><title>MinitelGPT Admin</title>
+<link rel=icon type=image/png sizes=32x32 href=/assets/favicon-32.png>
+<link rel=apple-touch-icon href=/assets/apple-touch-icon-180.png>
 <style>
+header img{height:36px;width:auto;vertical-align:middle;margin-right:10px}
 *{box-sizing:border-box}body{background:#0d0d1a;color:#e0e0e0;font-family:'Courier New',monospace;margin:0}
 header{background:#1a1a2e;border-bottom:2px solid #00ff88;padding:12px 24px;display:flex;justify-content:space-between;align-items:center}
 header h1{color:#00ff88;margin:0;font-size:1.2em}.logout{color:#666;text-decoration:none;font-size:.85em}
@@ -158,7 +165,7 @@ pre{background:#0d0d1a;padding:10px;border-radius:4px;font-size:.72em;max-height
 .flash{padding:10px;border-radius:4px;margin-bottom:12px;font-size:.9em}.fok{background:#0d3320;color:#00ff88;border:1px solid #00ff88}.ferr{background:#330d0d;color:#ff4444;border:1px solid #ff4444}
 .muted{color:#666;font-size:.8em}#spin{display:none;color:#aaa;margin-top:6px}
 </style></head><body>
-<header><h1>🖥 MINITEL GPT — Administration</h1><a href=/logout class=logout>Déconnexion</a></header>
+<header><h1><img src=/assets/logo-minitel-gpt.png alt="">MINITEL GPT — Administration</h1><a href=/logout class=logout>Déconnexion</a></header>
 <main>
 {% if flash %}<div class="flash {{'fok' if flash_ok else 'ferr'}}">{{flash}}</div>{% endif %}
 <div class=grid>
@@ -267,6 +274,11 @@ async function genPrompt(){
 </body></html>"""
 
 # ── Routes ───────────────────────────────────────────────────────────────
+@app.route("/assets/<path:filename>")
+def assets(filename):
+    return send_from_directory(ASSETS_DIR, filename)
+
+
 @app.route("/login", methods=["GET", "POST"])
 def login():
     error = None
