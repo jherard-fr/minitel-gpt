@@ -10,9 +10,10 @@ import os
 import sys
 import time
 import logging
+import subprocess
 from pathlib import Path
 from dotenv import load_dotenv
-import anthropic
+import requests
 
 load_dotenv(Path(__file__).parent.parent / ".env")
 
@@ -32,9 +33,33 @@ SCREEN_ROWS = 24
 CONTENT_ROWS = 18          # lignes de contenu par page de réponse
 IDLE_TIMEOUT = 300         # 5 min → retour sommaire
 
-ANTHROPIC_KEY = os.environ["ANTHROPIC_KEY"]
-MODEL = os.getenv("CLAUDE_MODEL", "claude-haiku-4-5-20251001")
+MISTRAL_KEY = os.environ.get("MISTRAL_KEY", "")
+MODEL = os.getenv("MISTRAL_MODEL", "mistral-small-latest")
+MISTRAL_URL = "https://api.mistral.ai/v1/chat/completions"
 PROMPTS_FILE = Path(__file__).parent.parent / "config" / "prompts.json"
+
+
+def call_mistral(system_prompt, history):
+    """Appelle l'API Mistral (chat completions) et retourne le texte de réponse."""
+    messages = [{"role": "system", "content": system_prompt}] + history
+    r = requests.post(
+        MISTRAL_URL,
+        headers={"Authorization": f"Bearer {MISTRAL_KEY}",
+                 "Content-Type": "application/json"},
+        json={"model": MODEL, "messages": messages, "max_tokens": 700},
+        timeout=30,
+    )
+    r.raise_for_status()
+    return r.json()["choices"][0]["message"]["content"].strip()
+
+
+def get_ip():
+    """IP locale (wlan0) pour l'affichage de l'accès admin."""
+    try:
+        out = subprocess.run(["hostname", "-I"], capture_output=True, text=True).stdout
+        return out.split()[0] if out.split() else None
+    except Exception:
+        return None
 
 logging.basicConfig(
     level=logging.INFO,
@@ -183,6 +208,25 @@ def show_home(t: Term, title_msg, question_msg):
     t.w(bytes([CR, LF, CR, LF]))      # 1 ligne vide avant la saisie
 
 
+def show_guide(t: Term):
+    """Écran d'aide affiché sur la touche GUIDE : adresse de l'interface d'admin."""
+    ip = get_ip()
+    t.clear()
+    t.w(bytes([CR, LF, CR, LF]))
+    t.w(FG_CYAN); t.center("=== ADMINISTRATION ===")
+    t.w(bytes([CR, LF, CR, LF]))
+    t.w(FG_WHITE)
+    if ip:
+        t.center(f"http://{ip}:8080")
+    else:
+        t.center("Adresse IP indisponible")
+    t.w(bytes([CR, LF, CR, LF]))
+    t.center("Mot de passe : 13100")
+    t.w(bytes([CR, LF, CR, LF, CR, LF]))
+    t.w(FG_CYAN); t.center("Une touche pour revenir")
+    t.read_key(120)
+
+
 def read_question(t: Term):
     """Lit une question. Retourne (texte, 'envoi') / (None,'sommaire') / (None,'timeout')."""
     t.w(FG_GREEN)
@@ -196,6 +240,8 @@ def read_question(t: Term):
         if kind == 'fn':
             if code == K_SOMMAIRE:
                 return None, 'sommaire'
+            if code == K_GUIDE:
+                return None, 'guide'
             if code == K_ENVOI:
                 if buf:
                     return "".join(buf), 'envoi'
@@ -245,9 +291,8 @@ def show_response(t: Term, text: str):
 
 # ── Boucle principale ────────────────────────────────────────────────────
 def run():
-    client = anthropic.Anthropic(api_key=ANTHROPIC_KEY)
     t = Term()
-    log.info(f"Démarré sur {PORT} (modèle {MODEL})")
+    log.info(f"Démarré sur {PORT} (modèle Mistral {MODEL})")
 
     while True:  # boucle sommaire
         # Recharger le preset à chaque retour au sommaire (prise en compte des édits)
@@ -257,6 +302,9 @@ def run():
 
         while True:  # boucle conversation
             question, action = read_question(t)
+            if action == 'guide':
+                show_guide(t)
+                break          # retour au sommaire après l'écran d'aide
             if action in ('sommaire', 'timeout'):
                 break
 
@@ -266,11 +314,7 @@ def run():
             t.w(bytes([CR, LF]))
             t.w(FG_CYAN); t.line(""); t.center(loading_msg)
             try:
-                resp = client.messages.create(
-                    model=MODEL, max_tokens=700,
-                    system=system_prompt, messages=history,
-                )
-                answer = resp.content[0].text.strip()
+                answer = call_mistral(system_prompt, history)
                 history.append({"role": "assistant", "content": answer})
                 answer = answer.encode("ascii", errors="replace").decode("ascii")
             except Exception as e:

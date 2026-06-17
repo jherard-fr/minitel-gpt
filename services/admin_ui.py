@@ -7,6 +7,7 @@ import json
 import os
 import re
 import subprocess
+import unicodedata
 from pathlib import Path
 from functools import wraps
 from flask import (Flask, render_template_string, request, redirect,
@@ -25,6 +26,23 @@ DEFAULTS = {
     "question_msg": "Posez votre question :",
     "loading_msg": "Consultation en cours...",
 }
+
+# Caractères affichés sur le Minitel → nettoyage ASCII (le Minitel ne gère pas
+# les accents ni les caractères spéciaux). Appliqué à la sauvegarde des presets.
+_ASCII_REPL = {
+    "œ": "oe", "Œ": "OE", "æ": "ae", "Æ": "AE", "€": "EUR",
+    "’": "'", "‘": "'", "“": '"', "”": '"', "«": '"', "»": '"',
+    "–": "-", "—": "-", "…": "...", " ": " ", "·": ".",
+}
+
+def to_minitel_ascii(s: str) -> str:
+    """Convertit un texte en ASCII pur affichable sur Minitel (sans accents)."""
+    if not s:
+        return s
+    for k, v in _ASCII_REPL.items():
+        s = s.replace(k, v)
+    s = unicodedata.normalize("NFKD", s)
+    return s.encode("ascii", "ignore").decode("ascii")
 
 app = Flask(__name__)
 app.secret_key = SECRET_KEY
@@ -71,11 +89,11 @@ def write_env_key(key, value):
         lines.append(f"{key}={value}")
     ENV_FILE.write_text("\n".join(lines) + "\n")
 
-def anthropic_key():
-    return read_env().get("ANTHROPIC_KEY", os.getenv("ANTHROPIC_KEY", ""))
+def mistral_key():
+    return read_env().get("MISTRAL_KEY", os.getenv("MISTRAL_KEY", ""))
 
-def claude_model():
-    return read_env().get("CLAUDE_MODEL", "claude-haiku-4-5-20251001")
+def mistral_model():
+    return read_env().get("MISTRAL_MODEL", "mistral-small-latest")
 
 # ── Auth ─────────────────────────────────────────────────────────────────
 def require_login(f):
@@ -115,11 +133,10 @@ def log_tail(name, n=40):
 
 # ── Génération de prompt par IA ──────────────────────────────────────────
 def generate_prompt(description):
-    import anthropic
-    key = anthropic_key()
+    import requests
+    key = mistral_key()
     if not key:
-        raise RuntimeError("Clé Anthropic absente")
-    client = anthropic.Anthropic(api_key=key)
+        raise RuntimeError("Clé Mistral absente")
     meta = (
         "Tu es expert en conception de prompts systeme pour un chatbot affiche "
         "sur un terminal Minitel (40 colonnes, ASCII sans accents ni emojis).\n\n"
@@ -134,11 +151,15 @@ def generate_prompt(description):
         "Reponds UNIQUEMENT avec le texte du prompt systeme, sans preambule.\n\n"
         f"DESCRIPTION DU PROJET :\n{description}"
     )
-    resp = client.messages.create(
-        model=claude_model(), max_tokens=1500,
-        messages=[{"role": "user", "content": meta}],
+    r = requests.post(
+        "https://api.mistral.ai/v1/chat/completions",
+        headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+        json={"model": mistral_model(), "max_tokens": 1500,
+              "messages": [{"role": "user", "content": meta}]},
+        timeout=45,
     )
-    return resp.content[0].text.strip()
+    r.raise_for_status()
+    return r.json()["choices"][0]["message"]["content"].strip()
 
 # ── Templates ────────────────────────────────────────────────────────────
 LOGIN_HTML = """<!DOCTYPE html><html lang=fr><head><meta charset=UTF-8>
@@ -301,20 +322,13 @@ hr{border:none;border-top:1px solid var(--border);margin:16px 0}
 <!-- PARAMETRES -->
 <section class=panel id=params>
   <div class=block>
-    <h2>Clé API Anthropic</h2>
+    <h2>Clé API Mistral</h2>
     <form method=POST action=/save-key>
       <p class=sub>Actuelle : {{key_masked}}</p>
-      <input type=password name=anthropic_key placeholder="sk-ant-...">
+      <input type=password name=mistral_key placeholder="clé Mistral...">
       <button class="btn btn-p">Enregistrer la clé</button>
     </form>
-  </div>
-  <div class=block>
-    <h2>Email de notification</h2>
-    <form method=POST action=/save-mail>
-      <p class=sub>Reçoit l'IP du Minitel au démarrage et après config WiFi.</p>
-      <input type=text name=mail_to value="{{mail_to}}" placeholder="vous@exemple.com">
-      <button class="btn btn-p">Enregistrer l'email</button>
-    </form>
+    <p class=sub style=margin-top:10px>Adresse de l'admin : consultable sur le Minitel via la touche <b>Guide</b>.</p>
   </div>
   <div class=block>
     <h2>Logs du terminal <a href=/ class=sub style=margin-left:8px>rafraîchir</a></h2>
@@ -397,18 +411,17 @@ def logout():
 def index():
     data = load_prompts()
     presets = normalized_presets(data)
-    key = anthropic_key()
-    masked = (key[:10] + "..." + key[-4:]) if len(key) > 14 else ("(définie)" if key else "(absente)")
+    key = mistral_key()
+    masked = (key[:6] + "..." + key[-4:]) if len(key) > 12 else ("(définie)" if key else "(absente)")
     services = {"minitel-chatgpt": svc_status("minitel-chatgpt"),
                 "wifi-manager": svc_status("wifi-manager"),
-                "boot-notify": svc_status("boot-notify"),
                 "admin-ui": svc_status("admin-ui")}
     flash = session.pop("flash", None); flash_ok = session.pop("flash_ok", False)
     return render_template_string(
         ADMIN_HTML, presets=presets, presets_json=json.dumps(presets),
         active_key=data["active"], services=services, ip=ip_address(),
         log_chatgpt=log_tail("chatgpt"), key_masked=masked,
-        mail_to=read_env().get("MAIL_TO", ""), flash=flash, flash_ok=flash_ok)
+        flash=flash, flash_ok=flash_ok)
 
 @app.route("/save-prompt", methods=["POST"])
 @require_login
@@ -417,9 +430,9 @@ def save_prompt():
     k = request.form.get("preset_key", "").strip() or data["active"]
     p = data["presets"].setdefault(k, {})
     p["label"] = request.form.get("label", k).strip() or k
-    p["title_msg"] = request.form.get("title_msg", DEFAULTS["title_msg"])[:40]
-    p["question_msg"] = request.form.get("question_msg", DEFAULTS["question_msg"])[:40]
-    p["loading_msg"] = request.form.get("loading_msg", DEFAULTS["loading_msg"])[:40]
+    p["title_msg"] = to_minitel_ascii(request.form.get("title_msg", DEFAULTS["title_msg"]))[:40]
+    p["question_msg"] = to_minitel_ascii(request.form.get("question_msg", DEFAULTS["question_msg"]))[:40]
+    p["loading_msg"] = to_minitel_ascii(request.form.get("loading_msg", DEFAULTS["loading_msg"]))[:40]
     sp = request.form.get("system_prompt", "").strip()
     if sp:
         p["system"] = sp
@@ -439,9 +452,9 @@ def apply_preset():
         p = data["presets"][k]
         if request.form.get("label"):
             p["label"] = request.form.get("label").strip()
-            p["title_msg"] = request.form.get("title_msg", DEFAULTS["title_msg"])[:40]
-            p["question_msg"] = request.form.get("question_msg", DEFAULTS["question_msg"])[:40]
-            p["loading_msg"] = request.form.get("loading_msg", DEFAULTS["loading_msg"])[:40]
+            p["title_msg"] = to_minitel_ascii(request.form.get("title_msg", DEFAULTS["title_msg"]))[:40]
+            p["question_msg"] = to_minitel_ascii(request.form.get("question_msg", DEFAULTS["question_msg"]))[:40]
+            p["loading_msg"] = to_minitel_ascii(request.form.get("loading_msg", DEFAULTS["loading_msg"]))[:40]
             if request.form.get("system_prompt", "").strip():
                 p["system"] = request.form.get("system_prompt").strip()
         data["active"] = k
@@ -501,27 +514,14 @@ def gen_prompt_route():
 @app.route("/save-key", methods=["POST"])
 @require_login
 def save_key():
-    key = request.form.get("anthropic_key", "").strip()
+    key = request.form.get("mistral_key", "").strip()
     if key:
-        write_env_key("ANTHROPIC_KEY", key)
+        write_env_key("MISTRAL_KEY", key)
         restart_terminal()
-        session["flash"] = "Clé Anthropic enregistrée et terminal redémarré."
+        session["flash"] = "Clé Mistral enregistrée et terminal redémarré."
         session["flash_ok"] = True
     else:
         session["flash"] = "Clé vide."; session["flash_ok"] = False
-    return redirect(url_for("index"))
-
-@app.route("/save-mail", methods=["POST"])
-@require_login
-def save_mail():
-    mail = request.form.get("mail_to", "").strip()
-    if mail and "@" in mail:
-        write_env_key("MAIL_TO", mail)
-        restart_terminal()
-        session["flash"] = f"Email de notification : {mail}"
-        session["flash_ok"] = True
-    else:
-        session["flash"] = "Adresse email invalide."; session["flash_ok"] = False
     return redirect(url_for("index"))
 
 @app.route("/restart", methods=["POST"])

@@ -355,7 +355,6 @@ def connect():
         success, result = connect_wifi(ssid, password)
         if success:
             subprocess.run(["systemctl", "start", "minitel-chatgpt"], check=False)
-            subprocess.run(["systemctl", "start", "boot-notify"], check=False)
         else:
             log.warning(f"Connexion à {ssid} échouée : {result}")
 
