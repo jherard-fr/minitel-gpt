@@ -12,10 +12,12 @@ from pathlib import Path
 from functools import wraps
 from flask import (Flask, render_template_string, request, redirect,
                    url_for, session, jsonify, send_from_directory)
+from werkzeug.utils import secure_filename
 
 PROJ_DIR = Path(__file__).parent.parent
 ASSETS_DIR = PROJ_DIR / "assets"
 PROMPTS_FILE = PROJ_DIR / "config" / "prompts.json"
+KNOWLEDGE_DIR = PROJ_DIR / "config" / "knowledge"
 ENV_FILE = PROJ_DIR / ".env"
 LOGS_DIR = PROJ_DIR / "logs"
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "13100")
@@ -65,6 +67,16 @@ def normalized_presets(data):
         merged.setdefault("label", k)
         out[k] = merged
     return out
+
+# ── Fichiers de connaissance par preset ──────────────────────────────────
+def list_knowledge(key):
+    folder = KNOWLEDGE_DIR / key
+    if not folder.is_dir():
+        return []
+    return sorted(f.name for f in folder.glob("*.txt"))
+
+def all_knowledge():
+    return {k: list_knowledge(k) for k in load_prompts()["presets"]}
 
 # ── Helpers .env ─────────────────────────────────────────────────────────
 def read_env():
@@ -317,6 +329,16 @@ hr{border:none;border-top:1px solid var(--border);margin:16px 0}
     <button class="btn btn-p" type=button onclick=genPrompt()>Générer les consignes</button>
     <div id=spin>⏳ Génération en cours...</div>
   </div>
+  <div class=block>
+    <h2>📄 Fichiers de connaissance (.txt)</h2>
+    <p class=sub>Contenus que cette personnalité utilisera pour répondre (injectés dans son contexte). Pour : <b id=kpresetname></b></p>
+    <ul class=plist id=klist></ul>
+    <form method=POST action=/upload-knowledge enctype=multipart/form-data>
+      <input type=hidden name=preset_key id=kkey>
+      <input type=file name=files accept=".txt" multiple>
+      <button class="btn btn-p">Ajouter le(s) fichier(s)</button>
+    </form>
+  </div>
 </section>
 
 <!-- PARAMETRES -->
@@ -341,6 +363,7 @@ hr{border:none;border-top:1px solid var(--border);margin:16px 0}
 <script>
 const PRESETS = {{presets_json|safe}};
 const ACTIVE = {{active_key|tojson}};
+const KNOWLEDGE = {{knowledge_json|safe}};
 // Onglets
 document.querySelectorAll('nav.tabs button').forEach(b=>{
   b.onclick=()=>{
@@ -364,6 +387,19 @@ function loadPreset(){
   document.getElementById('activeInfo').textContent=
     (k===ACTIVE)?'● Personnalité actuellement active sur le Minitel.'
                 :'Personnalité inactive. Cliquez « Activer » pour l\\'utiliser.';
+  // Fichiers de connaissance du preset
+  document.getElementById('kkey').value=k;
+  document.getElementById('kpresetname').textContent=p.label||k;
+  const files=KNOWLEDGE[k]||[], ul=document.getElementById('klist');
+  ul.innerHTML='';
+  if(!files.length){ul.innerHTML='<li style="color:#9a9aa4">Aucun fichier</li>';}
+  files.forEach(fn=>{
+    const li=document.createElement('li');
+    const span=document.createElement('span');span.className='name';span.textContent=fn;
+    const f=document.createElement('form');f.method='POST';f.action='/delete-knowledge';f.style.margin='0';
+    f.innerHTML='<input type=hidden name=preset_key value="'+k+'"><input type=hidden name=filename value="'+fn+'"><button class="btn btn-d" style="margin:0;padding:6px 12px">Suppr.</button>';
+    li.appendChild(span);li.appendChild(f);ul.appendChild(li);
+  });
 }
 function newPreset(){
   const label=prompt("Nom de la nouvelle personnalité :"); if(!label)return;
@@ -419,6 +455,7 @@ def index():
     flash = session.pop("flash", None); flash_ok = session.pop("flash_ok", False)
     return render_template_string(
         ADMIN_HTML, presets=presets, presets_json=json.dumps(presets),
+        knowledge_json=json.dumps(all_knowledge()),
         active_key=data["active"], services=services, ip=ip_address(),
         log_chatgpt=log_tail("chatgpt"), key_masked=masked,
         flash=flash, flash_ok=flash_ok)
@@ -522,6 +559,47 @@ def save_key():
         session["flash_ok"] = True
     else:
         session["flash"] = "Clé vide."; session["flash_ok"] = False
+    return redirect(url_for("index"))
+
+@app.route("/upload-knowledge", methods=["POST"])
+@require_login
+def upload_knowledge():
+    key = request.form.get("preset_key", "").strip()
+    data = load_prompts()
+    if key not in data["presets"]:
+        session["flash"] = "Personnalité inconnue."; session["flash_ok"] = False
+        return redirect(url_for("index"))
+    folder = KNOWLEDGE_DIR / key
+    folder.mkdir(parents=True, exist_ok=True)
+    files = request.files.getlist("files")
+    n = 0
+    for f in files:
+        if not f or not f.filename:
+            continue
+        name = secure_filename(f.filename)
+        if not name.lower().endswith(".txt"):
+            name += ".txt"
+        f.save(str(folder / name))
+        n += 1
+    if key == data["active"]:
+        restart_terminal()
+    session["flash"] = f"{n} fichier(s) ajouté(s) à « {data['presets'][key].get('label', key)} »." if n else "Aucun fichier .txt valide."
+    session["flash_ok"] = bool(n)
+    return redirect(url_for("index"))
+
+@app.route("/delete-knowledge", methods=["POST"])
+@require_login
+def delete_knowledge():
+    key = request.form.get("preset_key", "").strip()
+    fn = secure_filename(request.form.get("filename", "").strip())
+    target = KNOWLEDGE_DIR / key / fn
+    if fn and target.is_file():
+        target.unlink()
+        if key == load_prompts()["active"]:
+            restart_terminal()
+        session["flash"] = f"Fichier {fn} supprimé."; session["flash_ok"] = True
+    else:
+        session["flash"] = "Fichier introuvable."; session["flash_ok"] = False
     return redirect(url_for("index"))
 
 @app.route("/restart", methods=["POST"])

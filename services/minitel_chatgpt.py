@@ -92,13 +92,46 @@ FALLBACK_PROMPT = (
 )
 
 
+KNOWLEDGE_DIR = Path(__file__).parent.parent / "config" / "knowledge"
+KNOWLEDGE_MAX_CHARS = 12000   # plafond du contexte injecté (coût/latence)
+
+
+def load_knowledge(active_key):
+    """Concatène les fichiers .txt de connaissance du preset (plafonné)."""
+    folder = KNOWLEDGE_DIR / active_key
+    if not folder.is_dir():
+        return ""
+    parts = []
+    total = 0
+    for f in sorted(folder.glob("*.txt")):
+        try:
+            txt = f.read_text(encoding="utf-8", errors="ignore").strip()
+        except Exception:
+            continue
+        if not txt:
+            continue
+        parts.append(f"--- {f.name} ---\n{txt}")
+        total += len(txt)
+        if total >= KNOWLEDGE_MAX_CHARS:
+            break
+    blob = "\n\n".join(parts)
+    return blob[:KNOWLEDGE_MAX_CHARS]
+
+
 def load_preset():
-    """Retourne (system, title_msg, question_msg, loading_msg)."""
+    """Retourne (system, title_msg, question_msg, loading_msg).
+    Le system inclut les fichiers de connaissance du preset s'il y en a."""
     try:
         data = json.load(open(PROMPTS_FILE))
-        p = data["presets"][data["active"]]
+        key = data["active"]
+        p = data["presets"][key]
+        system = p.get("system", FALLBACK_PROMPT)
+        knowledge = load_knowledge(key)
+        if knowledge:
+            system += ("\n\nCONNAISSANCES DE REFERENCE (utilise ces informations "
+                       "en priorite pour repondre) :\n" + knowledge)
         return (
-            p.get("system", FALLBACK_PROMPT),
+            system,
             p.get("title_msg", "*** MINITEL GPT ***"),
             p.get("question_msg", "Posez votre question :"),
             p.get("loading_msg", "Consultation en cours..."),

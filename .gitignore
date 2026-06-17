@@ -4,3 +4,4 @@ __pycache__/
 logs/
 *.log
 fix_config.py
+config/knowledge/
