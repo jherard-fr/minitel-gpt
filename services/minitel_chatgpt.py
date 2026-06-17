@@ -11,9 +11,26 @@ import sys
 import time
 import logging
 import subprocess
+import unicodedata
 from pathlib import Path
 from dotenv import load_dotenv
 import requests
+
+# Translittération vers ASCII affichable sur Minitel (é→e, œ→oe, …) :
+# évite les « ? » que produisait encode('ascii','replace').
+_ASCII_REPL = {
+    "œ": "oe", "Œ": "OE", "æ": "ae", "Æ": "AE", "€": "EUR",
+    "’": "'", "‘": "'", "“": '"', "”": '"', "«": '"', "»": '"',
+    "–": "-", "—": "-", "…": "...", " ": " ", "·": ".", "•": "-",
+}
+
+def to_ascii(s: str) -> str:
+    if not s:
+        return s
+    for k, v in _ASCII_REPL.items():
+        s = s.replace(k, v)
+    s = unicodedata.normalize("NFKD", s)
+    return s.encode("ascii", "ignore").decode("ascii")
 
 load_dotenv(Path(__file__).parent.parent / ".env")
 
@@ -169,7 +186,7 @@ class Term:
 
     def w(self, data):
         if isinstance(data, str):
-            data = data.encode("ascii", errors="replace")
+            data = to_ascii(data).encode("ascii", errors="replace")
         self.s.write(data)
 
     def clear(self):
@@ -349,7 +366,7 @@ def run():
             try:
                 answer = call_mistral(system_prompt, history)
                 history.append({"role": "assistant", "content": answer})
-                answer = answer.encode("ascii", errors="replace").decode("ascii")
+                answer = to_ascii(answer)
             except Exception as e:
                 log.error(f"API: {e}")
                 answer = "Erreur de connexion. Reessayez."
