@@ -103,6 +103,11 @@ SZ_NORMAL = bytes([ESC,0x4C-0x0C])  # 0x40 normal (placeholder)
 K_ENVOI=0x41; K_RETOUR=0x42; K_REPET=0x43; K_GUIDE=0x44
 K_ANNUL=0x45; K_SOMMAIRE=0x46; K_CORR=0x47; K_SUITE=0x48
 
+# Minitel 2 en mode péri-informatique : les touches de fonction sont émises
+# en VT100 (SS3 = "ESC O x") au lieu du Videotex "SEP + code". Mapping x → code.
+SS3_MAP = {0x4D: K_ENVOI, 0x50: K_SOMMAIRE, 0x6E: K_SUITE, 0x6D: K_GUIDE,
+           0x52: K_RETOUR, 0x6C: K_CORR, 0x51: K_ANNUL}
+
 FALLBACK_PROMPT = (
     "Tu es MINITEL GPT. Reponds en francais, concis (max 30 lignes de 40 caracteres), "
     "ASCII sans accents ni emojis. Ne mentionne jamais que tu es une autre IA."
@@ -190,6 +195,11 @@ class Term:
         self.s.write(data)
 
     def clear(self):
+        # Minitel 2 : force le standard Vidéotex (PRO2 « ESC : 2 ~ »). Annule le
+        # mode téléinformatique 80 col (défilant, sans pagination) activé par
+        # Fnct+T A. Sans effet si le Minitel est déjà en Vidéotex (ex. Minitel 1).
+        self.w(bytes([ESC, 0x3A, 0x32, 0x7E]))
+        time.sleep(0.1)
         self.w(bytes([FF, RS]))
         time.sleep(0.2)
 
@@ -212,7 +222,7 @@ class Term:
             if b is None:
                 continue
             if b == SEP:
-                # Lire le code touche avec un court timeout (évite le blocage si SEP isolé)
+                # Mode Videotex (Minitel 1) : SEP + code touche
                 code = self.read_byte()
                 t2 = time.time() + 0.5
                 while code is None and time.time() < t2:
@@ -220,6 +230,20 @@ class Term:
                 if code is None:
                     continue          # SEP parasite → ignorer, ne pas bloquer
                 return ('fn', code)
+            if b == ESC:
+                # Mode péri-info (Minitel 2) : touche fonction en VT100 "ESC O x"
+                b2 = self.read_byte()
+                t2 = time.time() + 0.5
+                while b2 is None and time.time() < t2:
+                    b2 = self.read_byte()
+                if b2 == 0x4F:        # 'O' → séquence SS3
+                    code = self.read_byte()
+                    t3 = time.time() + 0.5
+                    while code is None and time.time() < t3:
+                        code = self.read_byte()
+                    if code in SS3_MAP:
+                        return ('fn', SS3_MAP[code])
+                continue              # autre séquence ESC → ignorer
             return ('char', b)
         return ('timeout', None)
 
