@@ -1,7 +1,8 @@
 # MINITEL GPT
 
-Transformer un **Minitel 1 Telic / Alcatel** en terminal de chat IA autonome,
-piloté par un **Raspberry Pi Zero 2 W**.
+Transformer un **Minitel** (testé sur **Minitel 1 Telic / Alcatel** et
+**Minitel 2**) en terminal de chat IA autonome, piloté par un **Raspberry Pi
+Zero 2 W**.
 
 On tape sa question sur le clavier du Minitel, le Pi interroge un modèle
 **Mistral** et affiche la réponse à l'écran, à 1200 bauds. La personnalité de
@@ -19,7 +20,7 @@ l'assistant est configurable via une interface web (la version phare est
 | Raspberry Pi Zero 2 W | Raspberry Pi OS Lite (Bookworm) — ou **Pi Zero W v1** (voir ci-dessous) |
 | Adaptateur USB-série | **FTDI FT232RL**, jumper sur **5 V** |
 | Câble | OTG micro-USB (FTDI → port USB *data* du Pi) |
-| Minitel | Telic / Alcatel 1, prise DIN 5 broches « péri-informatique » |
+| Minitel | Prise DIN 5 broches « péri-informatique » — testé sur **Minitel 1** (Telic/Alcatel) et **Minitel 2** |
 
 > **Compatible Pi Zero W (v1, 2017)** : en cas de pénurie de Zero 2 W, le Zero W
 > d'origine fonctionne. Le LLM est appelé en HTTP (`requests`), sans dépendance
@@ -38,15 +39,26 @@ l'assistant est configurable via une interface web (la version phare est
 Paramètres série : **1200 bauds, 7 bits, parité paire, 1 stop (7E1)** — norme Videotex.
 Le port apparaît côté Pi comme `/dev/ttyUSB0`.
 
-> **Mode péri-informatique** : sur la plupart des modèles (dont le Telic /
-> Alcatel 1), le port DIN reçoit et affiche les données **par défaut**, sans
-> aucune manipulation. Si rien ne s'affiche malgré un câblage correct, certains
-> modèles demandent de l'activer au clavier avec **Fnct + T** puis **A**.
+> ⚠️ **Seules les broches 1, 2 et 3 servent.** Laisser les broches **4 et 5
+> libres** (la broche 5 porte une **alimentation/tension**). Ne jamais ponter une
+> broche de signal vers la 4 ou la 5 : sur un Minitel 2 cela bloque la réception.
+
+> **Activation selon le modèle** (testé sur Minitel 1 **et** Minitel 2) :
 >
-> **Compatibilité entre modèles** : le brochage DIN ci-dessus est *normalisé*
-> (norme Télétel/STUM), donc identique sur tous les Minitels équipés de la prise
-> péri-informatique (1B, 2, Magis…). Ce qui peut varier d'un modèle à l'autre :
-> l'activation du mode (auto ou Fnct+T A) et la vitesse par défaut (1200/4800).
+> - **Minitel 1** (Telic / Alcatel) : le port DIN affiche les données **par
+>   défaut**, aucune manipulation — le service est prêt dès l'allumage.
+> - **Minitel 2** : démarre sur son **Répertoire** local. À chaque allumage :
+>   appuyer sur **`Fnct + Sommaire`** (quitte le Répertoire, connecte la prise à
+>   l'écran en Vidéotex), puis sur **`Sommaire`** pour afficher l'accueil
+>   MINITEL GPT.
+>   ⚠️ **Ne pas** faire `Fnct + T` puis `A` : cela bascule en mode
+>   *téléinformatique* (80 colonnes défilant, sans pagination) au lieu du beau
+>   Vidéotex 40 colonnes.
+>
+> **Compatibilité entre modèles** : le brochage DIN est *normalisé*
+> (norme Télétel/STUM), identique sur tous les Minitels à prise péri-informatique.
+> Le service reconnaît les touches de fonction en Vidéotex (`SEP`) **et** en
+> téléinformatique (VT100 `ESC O x`), et re-force le Vidéotex au besoin.
 
 ---
 
@@ -169,11 +181,13 @@ install.sh             installation
 
 | Symptôme | Cause probable |
 |---|---|
-| Rien ne s'affiche sur le Minitel | fil série délogé (cause n°1), jumper FTDI pas sur 5 V, ou (selon modèle) mode péri-info à activer via Fnct+T A |
+| Rien ne s'affiche sur le Minitel | fil série délogé (cause n°1), jumper FTDI pas sur 5 V, broche 4/5 pontée par erreur, ou Minitel 2 resté dans le Répertoire (faire `Fnct + Sommaire`) |
+| Minitel 2 : écran d'accueil vide après `Fnct + Sommaire` | normal — appuyer sur `Sommaire` pour afficher MINITEL GPT |
+| Affichage 80 colonnes qui défile sans pagination | Minitel 2 passé en mode téléinformatique via `Fnct + T A` — éviter cette combinaison (rester en `Fnct + Sommaire`) |
 | Charabia à l'écran | vitesse Pi ≠ vitesse Minitel (rester à 1200 bauds des deux côtés) |
 | Le hotspot n'apparaît pas | service `dnsmasq` système actif (port 53) → le désactiver |
 | Caractères doublés à la saisie | écho local du Minitel + écho logiciel (ne pas ré-écho côté Pi) |
-| Touches de fonction sans effet | un octet `0x13` isolé bloquait la lecture (corrigé) |
+| Touches de fonction sans effet | Minitel 2 en mode téléinfo (touches VT100, gérées) ou octet `0x13` isolé (corrigé) |
 
 ---
 
