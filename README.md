@@ -139,10 +139,28 @@ Trois onglets :
 - **Personnalités** : créer / modifier / supprimer des presets, génération de
   prompt par IA, **fichiers de connaissance** (.txt) injectés dans le contexte,
   textes d'accueil personnalisables
-- **Paramètres** : clé API Mistral, logs
+- **Paramètres** : clé API Mistral, **mise à jour de l'application**, logs
 
 Les personnalités sont stockées dans `config/prompts.json`, leurs fichiers de
 connaissance dans `config/knowledge/<personnalité>/`.
+
+### Mise à jour depuis l'admin
+
+L'onglet **Paramètres** permet de mettre à jour le code directement depuis
+GitHub, sans manipulation SSH :
+
+1. **Vérifier les mises à jour** → `git fetch` + affichage du changelog des
+   nouveautés disponibles.
+2. **Mettre à jour maintenant** → `git reset --hard origin/main` puis
+   redémarrage automatique des services.
+3. **Revenir à la version précédente** → rollback vers le commit d'avant.
+
+Tes données locales ne sont **jamais** écrasées : `prompts.json` (personnalités),
+`.env` (clés) et `config/knowledge/` sont hors du suivi git. Le dépôt fournit un
+`config/prompts.default.json`, recopié seulement si `prompts.json` est absent.
+
+> Prérequis : le dossier `~/minitel-gpt` du Pi doit être un **clone git** du dépôt
+> (`git init` + `remote add origin` + `fetch` + `reset --hard origin/main`).
 
 L'adresse de l'admin est aussi consultable **sur le Minitel via la touche Guide**.
 
