@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-MINITEL GPT — service de chat années 80 sur Minitel.
+MINITEL GPT - service de chat années 80 sur Minitel.
 Interface : sommaire (titre ASCII + invite) → saisie → réponse paginée → re-saisie.
 Touches : ENVOI = valider, SUITE = page suivante, SOMMAIRE = retour accueil.
 Timeout 5 min sans action → retour sommaire.
@@ -21,7 +21,7 @@ import requests
 _ASCII_REPL = {
     "œ": "oe", "Œ": "OE", "æ": "ae", "Æ": "AE", "€": "EUR",
     "’": "'", "‘": "'", "“": '"', "”": '"', "«": '"', "»": '"',
-    "–": "-", "—": "-", "…": "...", " ": " ", "·": ".", "•": "-",
+    "–": "-", "-": "-", "…": "...", " ": " ", "·": ".", "•": "-",
 }
 
 def to_ascii(s: str) -> str:

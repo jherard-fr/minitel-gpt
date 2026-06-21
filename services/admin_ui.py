@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Interface d'administration MINITEL GPT — http://<ip>:8080  (mot de passe 13100)
+Interface d'administration MINITEL GPT - http://<ip>:8080  (mot de passe 13100)
 Navigation par onglets : Tableau de bord · Personnalités · Paramètres.
 """
 import json
@@ -732,7 +732,7 @@ def check_update_route():
 def update_route():
     ok, msg = do_update()
     session.pop("update_log", None)
-    session["flash"] = ("Mise à jour appliquée — les services redémarrent (recharge la page dans ~10 s)."
+    session["flash"] = ("Mise à jour appliquée - les services redémarrent (recharge la page dans ~10 s)."
                         if ok else "Échec de la mise à jour : " + msg)
     session["flash_ok"] = ok
     return redirect(url_for("index"))
@@ -741,7 +741,7 @@ def update_route():
 @require_login
 def rollback_route():
     ok, msg = do_rollback()
-    session["flash"] = ("Version précédente restaurée — redémarrage en cours."
+    session["flash"] = ("Version précédente restaurée - redémarrage en cours."
                         if ok else "Échec : " + msg)
     session["flash_ok"] = ok
     return redirect(url_for("index"))

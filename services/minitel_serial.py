@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Service UART Minitel — gère la communication série avec le Minitel Telic MB1."""
+"""Service UART Minitel - gère la communication série avec le Minitel Telic MB1."""
 
 import serial
 import time
@@ -134,7 +134,7 @@ def loopback_test():
         log.info(f"LOOPBACK OK : {repr(received)}")
         return True
     else:
-        log.error(f"LOOPBACK FAIL — envoyé: {repr(test_bytes)}, reçu: {repr(received)}")
+        log.error(f"LOOPBACK FAIL - envoyé: {repr(test_bytes)}, reçu: {repr(received)}")
         return False
 
 

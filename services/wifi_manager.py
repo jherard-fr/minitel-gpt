@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-WiFi Manager — provisioning WiFi style IoT (Sonos/Chromecast).
+WiFi Manager - provisioning WiFi style IoT (Sonos/Chromecast).
 
 Comportement :
   1. Au boot : tente de rejoindre un réseau connu (30s timeout)
@@ -152,7 +152,7 @@ def create_hotspot():
         run(["nmcli", "con", "down", name], check=False)
     time.sleep(1)
 
-    # 2. (Re)créer le profil AP — réseau OUVERT (sans mot de passe) pour
+    # 2. (Re)créer le profil AP - réseau OUVERT (sans mot de passe) pour
     #    faciliter la connexion au portail de configuration.
     run(["nmcli", "con", "delete", AP_CON_NAME], check=False)
     run([
@@ -218,12 +218,12 @@ def connect_wifi(ssid: str, password: str) -> tuple[bool, str]:
     for _ in range(15):
         ip = is_connected()
         if ip:
-            log.info(f"Connecté à {ssid} — IP {ip}")
+            log.info(f"Connecté à {ssid} - IP {ip}")
             return True, ip
         time.sleep(2)
 
     create_hotspot()
-    return False, "Timeout — pas d'IP obtenue"
+    return False, "Timeout - pas d'IP obtenue"
 
 
 def try_known_networks(timeout: int = CONNECT_TIMEOUT) -> bool:
@@ -244,7 +244,7 @@ HTML = """<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>MinitelGPT — Configuration WiFi</title>
+<title>MinitelGPT - Configuration WiFi</title>
 <style>
   * { box-sizing: border-box; }
   body { font-family: monospace; background: #1a1a2e; color: #e0e0e0; margin: 0; padding: 20px;
@@ -269,14 +269,14 @@ HTML = """<!DOCTYPE html>
 </style>
 </head>
 <body>
-<h1>🖥 MinitelGPT — Configuration WiFi</h1>
+<h1>🖥 MinitelGPT - Configuration WiFi</h1>
 
 {% if status_msg %}
 <div class="status {{ 'ok' if status_ok else 'err' }}">{{ status_msg }}</div>
 {% endif %}
 
 <div class="card">
-<b>Réseaux disponibles</b> — <a href="/" style="color:#888;font-size:0.85em">Rafraîchir</a>
+<b>Réseaux disponibles</b> - <a href="/" style="color:#888;font-size:0.85em">Rafraîchir</a>
 <div id="networks">
 {% for net in networks %}
 <div class="network" onclick="selectNet('{{ net.ssid }}')" id="net-{{ loop.index }}">
@@ -292,7 +292,7 @@ HTML = """<!DOCTYPE html>
 
 <div class="card">
 <form id="wifiForm" onsubmit="connectWifi(event)">
-  <b>Réseau sélectionné :</b> <span id="selectedSSID" style="color:#00ff88">—</span>
+  <b>Réseau sélectionné :</b> <span id="selectedSSID" style="color:#00ff88">-</span>
   <input type="hidden" id="ssid" name="ssid">
   <input type="password" id="password" name="password" placeholder="Mot de passe WiFi" autocomplete="off">
   <br>
@@ -404,7 +404,7 @@ def monitor_loop():
                 log.info("Aucun réseau → bascule en hotspot MinitelGPT-Setup")
                 try:
                     create_hotspot()
-                    log.info(f"Hotspot actif — portail http://{AP_IP}")
+                    log.info(f"Hotspot actif - portail http://{AP_IP}")
                 except Exception as e:
                     log.error(f"Échec création hotspot : {e}")
         time.sleep(CHECK_INTERVAL)

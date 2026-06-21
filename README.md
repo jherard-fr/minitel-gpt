@@ -17,14 +17,14 @@ l'assistant est configurable via une interface web (la version phare est
 
 | Élément | Détail |
 |---|---|
-| Raspberry Pi | **Zero W**, **Zero 2 W** ou **Pi 3** (tous validés) — Raspberry Pi OS Lite. Le Zero W suffit (voir ci-dessous) |
+| Raspberry Pi | **Zero W**, **Zero 2 W** ou **Pi 3** (tous validés) - Raspberry Pi OS Lite. Le Zero W suffit (voir ci-dessous) |
 | Adaptateur USB-série | **FTDI FT232RL**, jumper sur **5 V** |
 | Câble | OTG micro-USB (FTDI → port USB *data* du Pi) |
-| Minitel | Prise DIN 5 broches « péri-informatique » — testé sur **Minitel 1** (Telic/Alcatel) et **Minitel 2** |
+| Minitel | Prise DIN 5 broches « péri-informatique » - testé sur **Minitel 1** (Telic/Alcatel) et **Minitel 2** |
 
 > **Compatible Pi Zero W (v1, 2017), Zero 2 W et Pi 3** : les trois sont validés.
 > En cas de pénurie de Zero 2 W, le Zero W d'origine fonctionne. Le LLM est appelé en HTTP (`requests`), sans dépendance
-> lourde à compiler — l'installation passe donc sur l'architecture ARMv6.
+> lourde à compiler - l'installation passe donc sur l'architecture ARMv6.
 > Flasher **Raspberry Pi OS Lite 32-bit**. Le CPU plus lent n'a quasi aucun impact :
 > l'affichage est de toute façon limité par la liaison série à 1200 bauds.
 
@@ -36,7 +36,7 @@ l'assistant est configurable via une interface web (la version phare est
 | RXD | broche 3 | Minitel → Pi (TX) |
 | GND | broche 2 | masse commune |
 
-Paramètres série : **1200 bauds, 7 bits, parité paire, 1 stop (7E1)** — norme Videotex.
+Paramètres série : **1200 bauds, 7 bits, parité paire, 1 stop (7E1)** - norme Videotex.
 Le port apparaît côté Pi comme `/dev/ttyUSB0`.
 
 > ⚠️ **Seules les broches 1, 2 et 3 servent.** Laisser les broches **4 et 5
@@ -46,7 +46,7 @@ Le port apparaît côté Pi comme `/dev/ttyUSB0`.
 > **Activation selon le modèle** (testé sur Minitel 1 **et** Minitel 2) :
 >
 > - **Minitel 1** (Telic / Alcatel) : le port DIN affiche les données **par
->   défaut**, aucune manipulation — le service est prêt dès l'allumage.
+>   défaut**, aucune manipulation - le service est prêt dès l'allumage.
 > - **Minitel 2** : démarre sur son **Répertoire** local. À chaque allumage :
 >   appuyer sur **`Fnct + Sommaire`** (quitte le Répertoire, connecte la prise à
 >   l'écran en Vidéotex), puis sur **`Sommaire`** pour afficher l'accueil
@@ -146,7 +146,7 @@ tail -f logs/chatgpt.log                  # logs
 
 ## Interface d'administration
 
-`http://<ip-du-pi>:8080` — mot de passe par défaut **mistral** (`ADMIN_PASSWORD`).
+`http://<ip-du-pi>:8080` - mot de passe par défaut **mistral** (`ADMIN_PASSWORD`).
 
 Trois onglets :
 - **Tableau de bord** : état des services, activation des personnalités
@@ -214,8 +214,8 @@ install.sh             installation
 | Symptôme | Cause probable |
 |---|---|
 | Rien ne s'affiche sur le Minitel | fil série délogé (cause n°1), jumper FTDI pas sur 5 V, broche 4/5 pontée par erreur, ou Minitel 2 resté dans le Répertoire (faire `Fnct + Sommaire`) |
-| Minitel 2 : écran d'accueil vide après `Fnct + Sommaire` | normal — appuyer sur `Sommaire` pour afficher MINITEL GPT |
-| Affichage 80 colonnes qui défile sans pagination | Minitel 2 passé en mode téléinformatique via `Fnct + T A` — éviter cette combinaison (rester en `Fnct + Sommaire`) |
+| Minitel 2 : écran d'accueil vide après `Fnct + Sommaire` | normal - appuyer sur `Sommaire` pour afficher MINITEL GPT |
+| Affichage 80 colonnes qui défile sans pagination | Minitel 2 passé en mode téléinformatique via `Fnct + T A` - éviter cette combinaison (rester en `Fnct + Sommaire`) |
 | Charabia à l'écran | vitesse Pi ≠ vitesse Minitel (rester à 1200 bauds des deux côtés) |
 | Le hotspot n'apparaît pas | service `dnsmasq` système actif (port 53) → le désactiver |
 | Caractères doublés à la saisie | écho local du Minitel + écho logiciel (ne pas ré-écho côté Pi) |

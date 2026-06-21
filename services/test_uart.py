@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Test UART autonome — loopback et diagnostic complet."""
+"""Test UART autonome - loopback et diagnostic complet."""
 
 import serial
 import time

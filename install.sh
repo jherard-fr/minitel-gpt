@@ -1,5 +1,5 @@
 #!/bin/bash
-# install.sh — Installation complète de MINITEL GPT sur Raspberry Pi
+# install.sh - Installation complète de MINITEL GPT sur Raspberry Pi
 # Prérequis : avoir cloné le dépôt dans /home/minitel/minitel-gpt
 #   cd /home/minitel && git clone https://github.com/jherard-fr/minitel-gpt.git
 # Usage : sudo bash install.sh
@@ -8,7 +8,7 @@ set -e
 PROJ_DIR="/home/minitel/minitel-gpt"
 SERVICE_DIR="/etc/systemd/system"
 
-echo "=== MINITEL GPT — Installation ==="
+echo "=== MINITEL GPT - Installation ==="
 
 # ── Dépendances système ─────────────────────────────────────────────────────
 echo "[1/7] Paquets système..."

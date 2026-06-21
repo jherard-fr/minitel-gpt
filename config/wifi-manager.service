@@ -1,5 +1,5 @@
 [Unit]
-Description=WiFi Manager — provisioning hotspot style IoT
+Description=WiFi Manager - provisioning hotspot style IoT
 After=NetworkManager.service
 Wants=NetworkManager.service
 
