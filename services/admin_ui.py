@@ -87,6 +87,27 @@ def list_knowledge(key):
 def all_knowledge():
     return {k: list_knowledge(k) for k in load_prompts()["presets"]}
 
+KNOWLEDGE_MAX_CHARS = 12000   # même plafond que le terminal
+
+def load_knowledge_blob(key):
+    """Concatène les .txt de connaissance d'un preset (comme le terminal)."""
+    folder = KNOWLEDGE_DIR / key
+    if not folder.is_dir():
+        return ""
+    parts, total = [], 0
+    for f in sorted(folder.glob("*.txt")):
+        try:
+            txt = f.read_text(encoding="utf-8", errors="ignore").strip()
+        except Exception:
+            continue
+        if not txt:
+            continue
+        parts.append(f"--- {f.name} ---\n{txt}")
+        total += len(txt)
+        if total >= KNOWLEDGE_MAX_CHARS:
+            break
+    return "\n\n".join(parts)[:KNOWLEDGE_MAX_CHARS]
+
 # ── Helpers .env ─────────────────────────────────────────────────────────
 def read_env():
     env = {}
@@ -300,6 +321,40 @@ def generate_prompt(description):
     r.raise_for_status()
     return r.json()["choices"][0]["message"]["content"].strip()
 
+def llm_answer(system_prompt, user_message):
+    """Interroge le LLM configuré comme le ferait le terminal (system + question).
+    Retourne le texte de la réponse."""
+    import requests
+    history = [{"role": "user", "content": user_message}]
+    if llm_provider() == "claude":
+        key = anthropic_key()
+        if not key:
+            raise RuntimeError("Clé Claude absente")
+        r = requests.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={"x-api-key": key, "anthropic-version": "2023-06-01",
+                     "content-type": "application/json"},
+            json={"model": claude_model(), "max_tokens": 700,
+                  "system": system_prompt, "messages": history},
+            timeout=45,
+        )
+        r.raise_for_status()
+        blocks = r.json().get("content", [])
+        return "".join(b.get("text", "") for b in blocks
+                       if b.get("type") == "text").strip()
+    key = mistral_key()
+    if not key:
+        raise RuntimeError("Clé Mistral absente")
+    messages = [{"role": "system", "content": system_prompt}] + history
+    r = requests.post(
+        "https://api.mistral.ai/v1/chat/completions",
+        headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+        json={"model": mistral_model(), "messages": messages, "max_tokens": 700},
+        timeout=45,
+    )
+    r.raise_for_status()
+    return r.json()["choices"][0]["message"]["content"].strip()
+
 # ── Templates ────────────────────────────────────────────────────────────
 LOGIN_HTML = """<!DOCTYPE html><html lang=fr><head><meta charset=UTF-8>
 <meta name=viewport content="width=device-width,initial-scale=1"><title>MinitelGPT Admin</title>
@@ -466,6 +521,18 @@ hr{border:none;border-top:1px solid var(--border);margin:16px 0}
       <button class="btn btn-p">Ajouter le(s) fichier(s)</button>
     </form>
   </div>
+  <div class=block>
+    <h2>🧪 Tester la personnalité</h2>
+    <p class=sub>Posez une question comme sur le Minitel, sans le Minitel. Le test
+      utilise le prompt système ci-dessus (même non enregistré), les fichiers de
+      connaissance, et le fournisseur d'IA configuré. La réponse est convertie en
+      ASCII, telle qu'elle s'afficherait à l'écran.</p>
+    <input type=text id=testMsg placeholder="Votre question..."
+      onkeydown="if(event.key==='Enter'){event.preventDefault();testPreset()}">
+    <button class="btn btn-p" type=button onclick=testPreset()>Envoyer</button>
+    <div id=testSpin style="display:none;color:var(--muted);margin-top:8px">⏳ Réponse en cours...</div>
+    <pre id=testOut style="display:none;margin-top:12px"></pre>
+  </div>
 </section>
 
 <!-- PARAMETRES -->
@@ -601,6 +668,22 @@ async function genPrompt(){
   }catch(e){alert('Erreur: '+e);}
   spin.style.display='none';
 }
+async function testPreset(){
+  const msg=document.getElementById('testMsg').value.trim();
+  if(!msg){alert('Saisissez une question');return;}
+  const key=document.getElementById('presetSel').value;
+  const system=document.getElementById('fsystem').value;
+  const spin=document.getElementById('testSpin'), out=document.getElementById('testOut');
+  spin.style.display='block'; out.style.display='none';
+  try{
+    const r=await fetch('/test-preset',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({preset_key:key,message:msg,system:system})});
+    const j=await r.json();
+    out.style.display='block';
+    out.textContent = j.ok ? (j.answer||'(réponse vide)') : ('Erreur : '+j.error);
+  }catch(e){out.style.display='block';out.textContent='Erreur : '+e;}
+  spin.style.display='none';
+}
 loadPreset();
 </script>
 </body></html>"""
@@ -731,6 +814,29 @@ def gen_prompt_route():
         return jsonify(ok=False, error="Description vide")
     try:
         return jsonify(ok=True, prompt=generate_prompt(desc))
+    except Exception as e:
+        return jsonify(ok=False, error=str(e))
+
+@app.route("/test-preset", methods=["POST"])
+@require_login
+def test_preset_route():
+    j = request.json or {}
+    key = (j.get("preset_key") or "").strip()
+    msg = (j.get("message") or "").strip()
+    if not msg:
+        return jsonify(ok=False, error="Question vide")
+    data = load_prompts()
+    if key not in data["presets"]:
+        return jsonify(ok=False, error="Personnalité inconnue")
+    # Prompt système : la version en cours d'édition si fournie, sinon l'enregistrée.
+    system = (j.get("system") or "").strip() or data["presets"][key].get("system", "")
+    kb = load_knowledge_blob(key)
+    if kb:
+        system += ("\n\nCONNAISSANCES DE REFERENCE (utilise ces informations "
+                   "en priorite pour repondre) :\n" + kb)
+    try:
+        answer = llm_answer(system, msg)
+        return jsonify(ok=True, answer=to_minitel_ascii(answer))
     except Exception as e:
         return jsonify(ok=False, error=str(e))
 

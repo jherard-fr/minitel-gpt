@@ -163,7 +163,8 @@ Trois onglets :
 - **Tableau de bord** : état des services, activation des personnalités
 - **Personnalités** : créer / modifier / supprimer des presets, génération de
   prompt par IA, **fichiers de connaissance** (.txt) injectés dans le contexte,
-  textes d'accueil personnalisables
+  textes d'accueil personnalisables, **zone de test** pour essayer les requêtes
+  sans le Minitel (mêmes prompt, connaissances et fournisseur d'IA)
 - **Paramètres** : choix du **fournisseur d'IA** (Mistral ou Claude) avec la clé
   et le modèle de chacun (coût + pertinence indiqués), **mise à jour de
   l'application**, logs
