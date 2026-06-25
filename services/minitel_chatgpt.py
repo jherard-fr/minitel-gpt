@@ -50,9 +50,23 @@ SCREEN_ROWS = 24
 CONTENT_ROWS = 18          # lignes de contenu par page de réponse
 IDLE_TIMEOUT = 300         # 5 min → retour sommaire
 
+# ── Fournisseur d'IA (LLM) ───────────────────────────────────────────────
+# LLM_PROVIDER = "mistral" (defaut) ou "claude". La cle et le modele de chaque
+# fournisseur sont independants ; on bascule sans perdre l'autre configuration.
+PROVIDER = os.getenv("LLM_PROVIDER", "mistral").strip().lower()
+
 MISTRAL_KEY = os.environ.get("MISTRAL_KEY", "")
-MODEL = os.getenv("MISTRAL_MODEL", "mistral-small-latest")
+MISTRAL_MODEL = os.getenv("MISTRAL_MODEL", "mistral-small-latest")
 MISTRAL_URL = "https://api.mistral.ai/v1/chat/completions"
+
+# Claude (Anthropic) - appele en HTTP brut comme Mistral, sans le SDK (le Pi
+# Zero ARMv6 evite les dependances lourdes a compiler).
+ANTHROPIC_KEY = os.environ.get("ANTHROPIC_KEY", "")
+CLAUDE_MODEL = os.getenv("CLAUDE_MODEL", "claude-haiku-4-5")
+ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
+
+# Modele effectivement utilise (pour les logs)
+MODEL = CLAUDE_MODEL if PROVIDER == "claude" else MISTRAL_MODEL
 PROMPTS_FILE = Path(__file__).parent.parent / "config" / "prompts.json"
 PROMPTS_DEFAULT = Path(__file__).parent.parent / "config" / "prompts.default.json"
 
@@ -72,11 +86,36 @@ def call_mistral(system_prompt, history):
         MISTRAL_URL,
         headers={"Authorization": f"Bearer {MISTRAL_KEY}",
                  "Content-Type": "application/json"},
-        json={"model": MODEL, "messages": messages, "max_tokens": 700},
+        json={"model": MISTRAL_MODEL, "messages": messages, "max_tokens": 700},
         timeout=30,
     )
     r.raise_for_status()
     return r.json()["choices"][0]["message"]["content"].strip()
+
+
+def call_claude(system_prompt, history):
+    """Appelle l'API Claude (Anthropic Messages) et retourne le texte de réponse.
+    Le prompt systeme est passe a part (champ `system`), pas dans `messages`."""
+    r = requests.post(
+        ANTHROPIC_URL,
+        headers={"x-api-key": ANTHROPIC_KEY,
+                 "anthropic-version": "2023-06-01",
+                 "content-type": "application/json"},
+        json={"model": CLAUDE_MODEL, "max_tokens": 700,
+              "system": system_prompt, "messages": history},
+        timeout=30,
+    )
+    r.raise_for_status()
+    blocks = r.json().get("content", [])
+    return "".join(b.get("text", "") for b in blocks
+                   if b.get("type") == "text").strip()
+
+
+def call_llm(system_prompt, history):
+    """Aiguille vers le fournisseur configure (LLM_PROVIDER)."""
+    if PROVIDER == "claude":
+        return call_claude(system_prompt, history)
+    return call_mistral(system_prompt, history)
 
 
 def get_ip():
@@ -371,7 +410,7 @@ def show_response(t: Term, text: str):
 # ── Boucle principale ────────────────────────────────────────────────────
 def run():
     t = Term()
-    log.info(f"Démarré sur {PORT} (modèle Mistral {MODEL})")
+    log.info(f"Démarré sur {PORT} (fournisseur {PROVIDER}, modèle {MODEL})")
 
     while True:  # boucle sommaire
         # Recharger le preset à chaque retour au sommaire (prise en compte des édits)
@@ -393,7 +432,7 @@ def run():
             t.w(bytes([CR, LF]))
             t.w(FG_CYAN); t.line(""); t.center(loading_msg)
             try:
-                answer = call_mistral(system_prompt, history)
+                answer = call_llm(system_prompt, history)
                 history.append({"role": "assistant", "content": answer})
                 answer = to_ascii(answer)
             except Exception as e:

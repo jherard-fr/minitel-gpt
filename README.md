@@ -94,12 +94,23 @@ Le script `install.sh` se charge de **tout** :
 ### Fichier `.env`
 
 ```env
+# Fournisseur d'IA : "mistral" (défaut) ou "claude"
+LLM_PROVIDER=mistral
+
+# Mistral
 MISTRAL_KEY=...
 MISTRAL_MODEL=mistral-small-latest
+
+# Claude (Anthropic) - utilisé si LLM_PROVIDER=claude
+ANTHROPIC_KEY=...
+CLAUDE_MODEL=claude-haiku-4-5
 ```
 
-> La clé Mistral peut aussi être saisie depuis l'interface d'admin
-> (onglet **Paramètres**). Crée-la sur https://admin.mistral.ai/organization/api-keys
+> Le **fournisseur** (Mistral ou Claude), les **clés** et les **modèles** se
+> règlent aussi depuis l'interface d'admin (onglet **Paramètres**), avec pour
+> chaque modèle son coût et sa pertinence. Crée une clé Mistral sur
+> https://admin.mistral.ai/organization/api-keys et une clé Claude sur
+> https://console.anthropic.com/settings/keys
 
 ### Préparation de la carte SD (avant tout)
 
@@ -153,7 +164,9 @@ Trois onglets :
 - **Personnalités** : créer / modifier / supprimer des presets, génération de
   prompt par IA, **fichiers de connaissance** (.txt) injectés dans le contexte,
   textes d'accueil personnalisables
-- **Paramètres** : clé API Mistral, **mise à jour de l'application**, logs
+- **Paramètres** : choix du **fournisseur d'IA** (Mistral ou Claude) avec la clé
+  et le modèle de chacun (coût + pertinence indiqués), **mise à jour de
+  l'application**, logs
 
 Les personnalités sont stockées dans `config/prompts.json`, leurs fichiers de
 connaissance dans `config/knowledge/<personnalité>/`.

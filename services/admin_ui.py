@@ -116,6 +116,35 @@ def mistral_key():
 def mistral_model():
     return read_env().get("MISTRAL_MODEL", "mistral-small-latest")
 
+def anthropic_key():
+    return read_env().get("ANTHROPIC_KEY", os.getenv("ANTHROPIC_KEY", ""))
+
+def claude_model():
+    return read_env().get("CLAUDE_MODEL", "claude-haiku-4-5")
+
+def llm_provider():
+    p = read_env().get("LLM_PROVIDER", os.getenv("LLM_PROVIDER", "mistral")).strip().lower()
+    return p if p in ("mistral", "claude") else "mistral"
+
+def mask_key(k):
+    return (k[:6] + "..." + k[-4:]) if len(k) > 12 else ("(définie)" if k else "(absente)")
+
+# Modèles proposés (id, libellé avec coût + pertinence). Le terminal n'affiche
+# que 40 colonnes et répond court → un modèle léger suffit largement.
+MISTRAL_MODELS = [
+    ("ministral-8b-latest",  "Ministral 8B - le moins cher, très rapide (~0,10 $/M)"),
+    ("mistral-small-latest", "Mistral Small - bon équilibre, recommandé (~0,20 $/M)"),
+    ("mistral-medium-latest","Mistral Medium - plus pertinent (~0,40 $/M entrée)"),
+    ("mistral-large-latest", "Mistral Large - le plus pertinent (~2 $/M entrée)"),
+]
+CLAUDE_MODELS = [
+    ("claude-haiku-4-5",  "Claude Haiku 4.5 - le moins cher, rapide, recommandé (1 $ / 5 $ par M)"),
+    ("claude-sonnet-4-6", "Claude Sonnet 4.6 - équilibre vitesse/intelligence (3 $ / 15 $ par M)"),
+    ("claude-opus-4-8",   "Claude Opus 4.8 - le plus pertinent, plus cher (5 $ / 25 $ par M)"),
+]
+MISTRAL_MODEL_IDS = {m[0] for m in MISTRAL_MODELS}
+CLAUDE_MODEL_IDS = {m[0] for m in CLAUDE_MODELS}
+
 # ── Auth ─────────────────────────────────────────────────────────────────
 def require_login(f):
     @wraps(f)
@@ -227,9 +256,6 @@ def do_rollback():
 # ── Génération de prompt par IA ──────────────────────────────────────────
 def generate_prompt(description):
     import requests
-    key = mistral_key()
-    if not key:
-        raise RuntimeError("Clé Mistral absente")
     meta = (
         "Tu es expert en conception de prompts systeme pour un chatbot affiche "
         "sur un terminal Minitel (40 colonnes, ASCII sans accents ni emojis).\n\n"
@@ -244,6 +270,26 @@ def generate_prompt(description):
         "Reponds UNIQUEMENT avec le texte du prompt systeme, sans preambule.\n\n"
         f"DESCRIPTION DU PROJET :\n{description}"
     )
+    if llm_provider() == "claude":
+        key = anthropic_key()
+        if not key:
+            raise RuntimeError("Clé Claude absente")
+        r = requests.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={"x-api-key": key, "anthropic-version": "2023-06-01",
+                     "content-type": "application/json"},
+            json={"model": claude_model(), "max_tokens": 1500,
+                  "messages": [{"role": "user", "content": meta}]},
+            timeout=45,
+        )
+        r.raise_for_status()
+        blocks = r.json().get("content", [])
+        return "".join(b.get("text", "") for b in blocks
+                       if b.get("type") == "text").strip()
+    # Mistral (défaut)
+    key = mistral_key()
+    if not key:
+        raise RuntimeError("Clé Mistral absente")
     r = requests.post(
         "https://api.mistral.ai/v1/chat/completions",
         headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
@@ -425,14 +471,48 @@ hr{border:none;border-top:1px solid var(--border);margin:16px 0}
 <!-- PARAMETRES -->
 <section class=panel id=params>
   <div class=block>
-    <h2>Clé API Mistral</h2>
-    <form method=POST action=/save-key>
-      <p class=sub>Actuelle : {{key_masked}}</p>
-      <input type=password name=mistral_key placeholder="clé Mistral...">
-      <button class="btn btn-p">Enregistrer la clé</button>
+    <h2>Fournisseur d'IA (LLM)</h2>
+    <p class=sub>Choisissez le moteur d'IA et son modèle. Le terminal et la génération
+      de prompts utilisent le fournisseur sélectionné. La clé de chaque fournisseur
+      est conservée indépendamment - vous pouvez basculer sans la ressaisir.</p>
+    <form method=POST action=/save-llm>
+      <label>Fournisseur utilisé</label>
+      <select name=llm_provider>
+        <option value=mistral {{'selected' if provider=='mistral'}}>Mistral</option>
+        <option value=claude {{'selected' if provider=='claude'}}>Claude (Anthropic)</option>
+      </select>
+
+      <div style="border-left:3px solid var(--accent);padding-left:12px;margin-top:16px">
+        <h3 style=margin-top:4px>Mistral</h3>
+        <label>Clé API Mistral <span class=sub>(actuelle : {{mistral_key_masked}})</span></label>
+        <input type=password name=mistral_key placeholder="clé Mistral... (vide = conserver l'actuelle)">
+        <p class=sub style=margin:6px 0 0>Pas encore de clé ?
+          <a href="https://admin.mistral.ai/organization/api-keys" target=_blank rel=noopener>Créer une clé API Mistral &#8599;</a></p>
+        <label>Modèle Mistral</label>
+        <select name=mistral_model>
+          {% for mid,desc in mistral_models %}
+          <option value="{{mid}}" {{'selected' if mid==mistral_model}}>{{desc}}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div style="border-left:3px solid var(--accent);padding-left:12px;margin-top:16px">
+        <h3 style=margin-top:4px>Claude (Anthropic)</h3>
+        <label>Clé API Claude <span class=sub>(actuelle : {{claude_key_masked}})</span></label>
+        <input type=password name=anthropic_key placeholder="clé Anthropic sk-ant-... (vide = conserver l'actuelle)">
+        <p class=sub style=margin:6px 0 0>Pas encore de clé ?
+          <a href="https://console.anthropic.com/settings/keys" target=_blank rel=noopener>Créer une clé API Claude &#8599;</a></p>
+        <label>Modèle Claude</label>
+        <select name=claude_model>
+          {% for cid,desc in claude_models %}
+          <option value="{{cid}}" {{'selected' if cid==claude_model}}>{{desc}}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <hr>
+      <button class="btn btn-p">💾 Enregistrer la configuration</button>
     </form>
-    <p class=sub style=margin-top:10px>Pas encore de clé ?
-      <a href="https://admin.mistral.ai/organization/api-keys" target=_blank rel=noopener>Créer une clé API sur Mistral &#8599;</a></p>
     <p class=sub style=margin-top:10px>Adresse de l'admin : consultable sur le Minitel via la touche <b>Guide</b>.</p>
   </div>
   <div class=block>
@@ -550,8 +630,6 @@ def logout():
 def index():
     data = load_prompts()
     presets = normalized_presets(data)
-    key = mistral_key()
-    masked = (key[:6] + "..." + key[-4:]) if len(key) > 12 else ("(définie)" if key else "(absente)")
     services = {"minitel-chatgpt": svc_status("minitel-chatgpt"),
                 "wifi-manager": svc_status("wifi-manager"),
                 "admin-ui": svc_status("admin-ui")}
@@ -560,7 +638,11 @@ def index():
         ADMIN_HTML, presets=presets, presets_json=json.dumps(presets),
         knowledge_json=json.dumps(all_knowledge()),
         active_key=data["active"], services=services, ip=ip_address(),
-        log_chatgpt=log_tail("chatgpt"), key_masked=masked,
+        log_chatgpt=log_tail("chatgpt"),
+        provider=llm_provider(),
+        mistral_key_masked=mask_key(mistral_key()), mistral_model=mistral_model(),
+        claude_key_masked=mask_key(anthropic_key()), claude_model=claude_model(),
+        mistral_models=MISTRAL_MODELS, claude_models=CLAUDE_MODELS,
         version=current_version(), update_log=session.pop("update_log", None),
         flash=flash, flash_ok=flash_ok)
 
@@ -652,17 +734,40 @@ def gen_prompt_route():
     except Exception as e:
         return jsonify(ok=False, error=str(e))
 
-@app.route("/save-key", methods=["POST"])
+@app.route("/save-llm", methods=["POST"])
 @require_login
-def save_key():
-    key = request.form.get("mistral_key", "").strip()
-    if key:
-        write_env_key("MISTRAL_KEY", key)
-        restart_terminal()
-        session["flash"] = "Clé Mistral enregistrée et terminal redémarré."
-        session["flash_ok"] = True
+def save_llm():
+    provider = request.form.get("llm_provider", "mistral").strip().lower()
+    if provider not in ("mistral", "claude"):
+        provider = "mistral"
+    write_env_key("LLM_PROVIDER", provider)
+
+    # Clés : on n'écrase que si une nouvelle valeur est saisie.
+    mk = request.form.get("mistral_key", "").strip()
+    if mk:
+        write_env_key("MISTRAL_KEY", mk)
+    ak = request.form.get("anthropic_key", "").strip()
+    if ak:
+        write_env_key("ANTHROPIC_KEY", ak)
+
+    # Modèles : on ne retient qu'un identifiant connu.
+    mm = request.form.get("mistral_model", "").strip()
+    if mm in MISTRAL_MODEL_IDS:
+        write_env_key("MISTRAL_MODEL", mm)
+    cm = request.form.get("claude_model", "").strip()
+    if cm in CLAUDE_MODEL_IDS:
+        write_env_key("CLAUDE_MODEL", cm)
+
+    restart_terminal()
+    label = "Claude" if provider == "claude" else "Mistral"
+    missing = (provider == "claude" and not anthropic_key()) or \
+              (provider == "mistral" and not mistral_key())
+    if missing:
+        session["flash"] = f"Configuration enregistrée (fournisseur : {label}), mais aucune clé API n'est définie pour ce fournisseur."
+        session["flash_ok"] = False
     else:
-        session["flash"] = "Clé vide."; session["flash_ok"] = False
+        session["flash"] = f"Configuration enregistrée (fournisseur : {label}) et terminal redémarré."
+        session["flash_ok"] = True
     return redirect(url_for("index"))
 
 @app.route("/upload-knowledge", methods=["POST"])
