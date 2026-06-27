@@ -51,6 +51,15 @@ if [ ! -f "$PROJ_DIR/config/prompts.json" ] && [ -f "$PROJ_DIR/config/prompts.de
   echo "      prompts.json créé depuis prompts.default.json"
 fi
 
+# .env : créé depuis env.example s'il manque, pour que les services démarrent
+# même sans clé (la clé se renseigne ensuite via l'admin web). Sans ce fichier,
+# l'ancienne unité systemd échouait au démarrage (EnvironmentFile introuvable).
+if [ ! -f "$PROJ_DIR/.env" ] && [ -f "$PROJ_DIR/config/env.example" ]; then
+  cp "$PROJ_DIR/config/env.example" "$PROJ_DIR/.env"
+  chown minitel:minitel "$PROJ_DIR/.env"
+  echo "      .env créé depuis env.example (renseigner la clé via l'admin)"
+fi
+
 # ── Règle sudo (l'admin web redémarre les services sans mot de passe) ───────
 echo "[6/7] Règle sudo..."
 cp "$PROJ_DIR/config/minitel-gpt-sudoers" /etc/sudoers.d/minitel-gpt
@@ -68,12 +77,14 @@ systemctl enable minitel-chatgpt.service wifi-manager.service admin-ui.service
 echo ""
 echo "=== Installation terminée ==="
 echo ""
-echo "1. Créer le fichier .env avec la clé Mistral :"
-echo "     cp $PROJ_DIR/config/env.example $PROJ_DIR/.env"
-echo "     nano $PROJ_DIR/.env      # renseigner MISTRAL_KEY"
+echo "1. Demarrer les services (un redemarrage suffit, recommande car"
+echo "   wifi-manager touche au reseau et peut couper la session SSH) :"
+echo "     sudo reboot"
+echo "   (ou, sans reboot : sudo systemctl start admin-ui minitel-chatgpt wifi-manager)"
 echo ""
-echo "2. Démarrer les services :"
-echo "     sudo systemctl start minitel-chatgpt wifi-manager admin-ui"
+echo "2. Renseigner la cle API depuis l'admin web (aucun .env a editer a la main) :"
+echo "   un .env par defaut a ete cree. Choisir le fournisseur (Mistral ou Claude)"
+echo "   et coller la cle dans l'onglet Parametres."
 echo ""
 echo "3. Admin web : http://<ip-du-pi>:8080   (mot de passe : mistral)"
 echo "   - onglet Parametres > Mise a jour : met a jour le code depuis GitHub"
