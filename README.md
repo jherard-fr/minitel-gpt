@@ -65,60 +65,97 @@ Le port apparaît côté Pi comme `/dev/ttyUSB0`.
 
 ## Installation
 
+### 1. Préparer la carte SD (avant tout)
+
+Avec **Raspberry Pi Imager** (<https://www.raspberrypi.com/software/>) : flasher
+**Raspberry Pi OS Lite**.
+
+- **Pi Zero 2 W / Pi 3** : version **64-bit**.
+- **Pi Zero W (v1)** : version **32-bit** - c'est la seule proposée par l'imageur
+  pour ce modèle (CPU ARMv6, pas de 64-bit), c'est normal.
+
+Dans les réglages (⚙) de l'imageur : activer **SSH**, définir l'utilisateur
+**`minitel`** + un mot de passe, et renseigner le **WiFi** initial. Le projet est
+entièrement *headless* : ni écran ni clavier branchés sur le Pi.
+
+### 2. Se connecter au Pi en SSH
+
+Depuis Windows, ouvrir **PowerShell**. Trouver l'adresse IP que le Pi a prise sur
+le réseau (le filtre cible les adresses MAC des Raspberry) :
+
+```powershell
+arp -a | Select-String "b8-27-eb|dc-a6-32|e4-5f-01|d8-3a-dd|2c-cf-67|28-cd-c1"
+```
+
+> Astuce : pour coller dans PowerShell, faites un **clic droit** sur la ligne de
+> commande.
+
+Se connecter en remplaçant l'IP par celle obtenue ci-dessus :
+
+```powershell
+ssh minitel@192.168.1.42
+```
+
+Saisir le mot de passe défini à l'étape 1. C'est normal qu'**aucun caractère ne
+s'affiche** pendant la frappe : c'est une sécurité.
+
+### 3. Installer MINITEL GPT
+
+Une fois connecté au Pi, mettre à jour le système et installer **git** (qui sert
+ensuite à garder le Pi sur la dernière version) :
+
 ```bash
-# 1. Cloner le projet dans le home de l'utilisateur 'minitel'
+sudo apt update
+sudo apt install git
+```
+
+Télécharger le projet :
+
+```bash
 cd /home/minitel
 git clone https://github.com/jherard-fr/minitel-gpt.git
 cd minitel-gpt
+```
 
-# 2. Créer le fichier .env (voir section ci-dessous)
-cp config/env.example .env
-nano .env
+Lancer l'installation (dépendances + services systemd) :
 
-# 3. Lancer l'installation (dépendances + services systemd)
+```bash
 sudo bash install.sh
 ```
 
-Le script `install.sh` se charge de **tout** :
+Puis démarrer les services :
 
-- paquets : `git`, `pyserial`, `flask`, `python-dotenv`, `requests`, `pyfiglet`,
-  `dnsmasq-base`, `iw` ;
-- désactivation du `dnsmasq` système (conflit hotspot) ;
-- groupe `dialout` (accès au port série FTDI) ;
-- création de `config/prompts.json` depuis `prompts.default.json` (s'il manque) ;
-- règle sudo (l'admin redémarre les services) ;
-- activation des 3 services systemd.
+```bash
+sudo systemctl restart minitel-chatgpt admin-ui wifi-manager
+```
+
+**Voilà, c'est fini.** L'écran d'accueil s'affiche sur le Minitel (sur un
+**Minitel 2**, faire `Fnct + Sommaire` à chaque allumage). Il reste à saisir la
+clé API depuis l'admin (étape 4).
+
+Le script `install.sh` se charge de **tout** : paquets système, dépendance Python
+`pyfiglet`, désactivation du `dnsmasq` système (conflit hotspot), groupe
+`dialout` (accès au port série FTDI), création de `config/prompts.json` et d'un
+`.env` par défaut s'ils manquent, règle sudo (l'admin redémarre les services), et
+activation des 3 services systemd.
 
 > Le dossier est un **clone git**, ce qui permet la mise à jour en un clic depuis
 > l'admin (onglet **Paramètres**). Ne pas remplacer les fichiers à la main.
 
-### Fichier `.env`
+### 4. Renseigner la clé API
 
-```env
-# Fournisseur d'IA : "mistral" (défaut) ou "claude"
-LLM_PROVIDER=mistral
+Aucun fichier à éditer à la main : ouvrir l'**admin web** (voir plus bas), onglet
+**Paramètres**, choisir le **fournisseur d'IA** (**Mistral** ou **Claude**) et
+coller la clé correspondante. Un menu propose pour chacun les modèles disponibles
+avec leur coût et leur pertinence.
 
-# Mistral
-MISTRAL_KEY=...
-MISTRAL_MODEL=mistral-small-latest
+- Clé **Mistral** : <https://admin.mistral.ai/organization/api-keys>
+- Clé **Claude** : <https://platform.claude.com/>
 
-# Claude (Anthropic) - utilisé si LLM_PROVIDER=claude
-ANTHROPIC_KEY=...
-CLAUDE_MODEL=claude-haiku-4-5
-```
-
-> Le **fournisseur** (Mistral ou Claude), les **clés** et les **modèles** se
-> règlent aussi depuis l'interface d'admin (onglet **Paramètres**), avec pour
-> chaque modèle son coût et sa pertinence. Crée une clé Mistral sur
-> https://admin.mistral.ai/organization/api-keys et une clé Claude sur
-> https://platform.claude.com/
-
-### Préparation de la carte SD (avant tout)
-
-Avec **Raspberry Pi Imager** : flasher **Raspberry Pi OS Lite (64-bit)**, et dans
-les réglages (⚙) : activer **SSH**, définir l'utilisateur **`minitel`** + mot de
-passe, et renseigner le **WiFi** initial. Le projet est entièrement *headless*
-(ni écran ni clavier sur le Pi).
+> Le `.env` (créé automatiquement par l'installation) peut aussi être édité
+> directement, mais l'admin est plus simple. Variables disponibles :
+> `LLM_PROVIDER` (`mistral` ou `claude`), `MISTRAL_KEY`, `MISTRAL_MODEL`,
+> `ANTHROPIC_KEY`, `CLAUDE_MODEL`.
 
 ### Mettre à jour le code (après installation)
 
@@ -140,7 +177,7 @@ sudo systemctl restart minitel-chatgpt admin-ui wifi-manager
 
 | Service | Rôle |
 |---|---|
-| `minitel-chatgpt` | Terminal : lit le clavier Minitel, interroge Mistral, affiche la réponse paginée |
+| `minitel-chatgpt` | Terminal : lit le clavier Minitel, interroge l'IA (Mistral ou Claude), affiche la réponse paginée |
 | `wifi-manager` | Connexion WiFi autonome + hotspot de provisioning (portail captif) |
 | `admin-ui` | Interface web d'administration (port 8080) |
 
