@@ -143,9 +143,16 @@ def anthropic_key():
 def claude_model():
     return read_env().get("CLAUDE_MODEL", "claude-haiku-4-5")
 
+def linkup_key():
+    return read_env().get("LINKUP_KEY", os.getenv("LINKUP_KEY", ""))
+
+def linkup_depth():
+    d = read_env().get("LINKUP_DEPTH", os.getenv("LINKUP_DEPTH", "standard")).strip().lower()
+    return d if d in LINKUP_DEPTH_IDS else "standard"
+
 def llm_provider():
     p = read_env().get("LLM_PROVIDER", os.getenv("LLM_PROVIDER", "mistral")).strip().lower()
-    return p if p in ("mistral", "claude") else "mistral"
+    return p if p in ("mistral", "claude", "linkup") else "mistral"
 
 def mask_key(k):
     return (k[:6] + "..." + k[-4:]) if len(k) > 12 else ("(définie)" if k else "(absente)")
@@ -163,8 +170,17 @@ CLAUDE_MODELS = [
     ("claude-sonnet-4-6", "Claude Sonnet 4.6 - équilibre vitesse/intelligence (3 $ / 15 $ par M)"),
     ("claude-opus-4-8",   "Claude Opus 4.8 - le plus pertinent, plus cher (5 $ / 25 $ par M)"),
 ]
+# Linkup n'est pas un LLM generatif mais un moteur de recherche web : la
+# "profondeur" remplace le modele. Tarifs : ~0,005 $ (fast/standard) ou
+# ~0,006 $ (deep) par recherche.
+LINKUP_DEPTHS = [
+    ("fast",     "Fast - reponse quasi instantanee, sans interpretation (~0,005 $/recherche)"),
+    ("standard", "Standard - recherche agentique iterative, recommande (~0,005 $/recherche)"),
+    ("deep",     "Deep - chainage multi-iterations, le plus pertinent, 5-30s (~0,006 $/recherche)"),
+]
 MISTRAL_MODEL_IDS = {m[0] for m in MISTRAL_MODELS}
 CLAUDE_MODEL_IDS = {m[0] for m in CLAUDE_MODELS}
+LINKUP_DEPTH_IDS = {m[0] for m in LINKUP_DEPTHS}
 
 # ── Auth ─────────────────────────────────────────────────────────────────
 def require_login(f):
@@ -291,7 +307,13 @@ def generate_prompt(description):
         "Reponds UNIQUEMENT avec le texte du prompt systeme, sans preambule.\n\n"
         f"DESCRIPTION DU PROJET :\n{description}"
     )
-    if llm_provider() == "claude":
+    provider = llm_provider()
+    if provider == "linkup":
+        raise RuntimeError(
+            "Linkup est un moteur de recherche web, pas un générateur de texte : "
+            "il ne peut pas rédiger de prompt système. Choisissez temporairement "
+            "Mistral ou Claude pour générer les consignes.")
+    if provider == "claude":
         key = anthropic_key()
         if not key:
             raise RuntimeError("Clé Claude absente")
@@ -326,7 +348,30 @@ def llm_answer(system_prompt, user_message):
     Retourne le texte de la réponse."""
     import requests
     history = [{"role": "user", "content": user_message}]
-    if llm_provider() == "claude":
+    provider = llm_provider()
+    if provider == "linkup":
+        key = linkup_key()
+        if not key:
+            raise RuntimeError("Clé Linkup absente")
+        # POST + corps JSON (la doc publique Linkup décrit un GET, mais en
+        # pratique seul le POST fonctionne - vérifié empiriquement, voir
+        # minitel_chatgpt.py::call_linkup).
+        r = requests.post(
+            "https://api.linkup.so/v1/search",
+            headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+            json={"q": user_message, "depth": linkup_depth(),
+                  "outputType": "sourcedAnswer"},
+            timeout=40,
+        )
+        r.raise_for_status()
+        data = r.json()
+        answer = (data.get("answer") or "").strip()
+        sources = data.get("sources") or []
+        if sources:
+            noms = ", ".join(s.get("name") or s.get("url", "") for s in sources[:3])
+            answer += f"\n\nSources : {noms}"
+        return answer or "Aucun resultat trouve."
+    if provider == "claude":
         key = anthropic_key()
         if not key:
             raise RuntimeError("Clé Claude absente")
@@ -547,7 +592,14 @@ hr{border:none;border-top:1px solid var(--border);margin:16px 0}
       <select name=llm_provider>
         <option value=mistral {{'selected' if provider=='mistral'}}>Mistral</option>
         <option value=claude {{'selected' if provider=='claude'}}>Claude (Anthropic)</option>
+        <option value=linkup {{'selected' if provider=='linkup'}}>Linkup (recherche web)</option>
       </select>
+      {% if provider=='linkup' %}
+      <p class=sub style="margin-top:8px;color:#e0b84a">⚠ Linkup est un moteur de recherche web,
+        pas un générateur de texte : la personnalité (prompt système) et l'historique de
+        conversation ne s'appliquent pas. Chaque question devient une recherche web isolée,
+        dont la réponse sourcée sert de réponse du terminal.</p>
+      {% endif %}
 
       <div style="border-left:3px solid var(--accent);padding-left:12px;margin-top:16px">
         <h3 style=margin-top:4px>Mistral</h3>
@@ -573,6 +625,20 @@ hr{border:none;border-top:1px solid var(--border);margin:16px 0}
         <select name=claude_model>
           {% for cid,desc in claude_models %}
           <option value="{{cid}}" {{'selected' if cid==claude_model}}>{{desc}}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div style="border-left:3px solid var(--accent);padding-left:12px;margin-top:16px">
+        <h3 style=margin-top:4px>Linkup (recherche web)</h3>
+        <label>Clé API Linkup <span class=sub>(actuelle : {{linkup_key_masked}})</span></label>
+        <input type=password name=linkup_key placeholder="clé Linkup... (vide = conserver l'actuelle)">
+        <p class=sub style=margin:6px 0 0>Pas encore de clé ?
+          <a href="https://app.linkup.so" target=_blank rel=noopener>Créer une clé API Linkup &#8599;</a></p>
+        <label>Profondeur de recherche</label>
+        <select name=linkup_depth>
+          {% for did,desc in linkup_depths %}
+          <option value="{{did}}" {{'selected' if did==linkup_depth}}>{{desc}}</option>
           {% endfor %}
         </select>
       </div>
@@ -725,7 +791,9 @@ def index():
         provider=llm_provider(),
         mistral_key_masked=mask_key(mistral_key()), mistral_model=mistral_model(),
         claude_key_masked=mask_key(anthropic_key()), claude_model=claude_model(),
+        linkup_key_masked=mask_key(linkup_key()), linkup_depth=linkup_depth(),
         mistral_models=MISTRAL_MODELS, claude_models=CLAUDE_MODELS,
+        linkup_depths=LINKUP_DEPTHS,
         version=current_version(), update_log=session.pop("update_log", None),
         flash=flash, flash_ok=flash_ok)
 
@@ -844,7 +912,7 @@ def test_preset_route():
 @require_login
 def save_llm():
     provider = request.form.get("llm_provider", "mistral").strip().lower()
-    if provider not in ("mistral", "claude"):
+    if provider not in ("mistral", "claude", "linkup"):
         provider = "mistral"
     write_env_key("LLM_PROVIDER", provider)
 
@@ -855,20 +923,26 @@ def save_llm():
     ak = request.form.get("anthropic_key", "").strip()
     if ak:
         write_env_key("ANTHROPIC_KEY", ak)
+    lk = request.form.get("linkup_key", "").strip()
+    if lk:
+        write_env_key("LINKUP_KEY", lk)
 
-    # Modèles : on ne retient qu'un identifiant connu.
+    # Modèles / profondeur : on ne retient qu'un identifiant connu.
     mm = request.form.get("mistral_model", "").strip()
     if mm in MISTRAL_MODEL_IDS:
         write_env_key("MISTRAL_MODEL", mm)
     cm = request.form.get("claude_model", "").strip()
     if cm in CLAUDE_MODEL_IDS:
         write_env_key("CLAUDE_MODEL", cm)
+    ld = request.form.get("linkup_depth", "").strip()
+    if ld in LINKUP_DEPTH_IDS:
+        write_env_key("LINKUP_DEPTH", ld)
 
     restart_terminal()
-    label = "Claude" if provider == "claude" else "Mistral"
-    missing = (provider == "claude" and not anthropic_key()) or \
-              (provider == "mistral" and not mistral_key())
-    if missing:
+    label = {"claude": "Claude", "linkup": "Linkup"}.get(provider, "Mistral")
+    key_present = {"claude": anthropic_key, "linkup": linkup_key,
+                   "mistral": mistral_key}[provider]()
+    if not key_present:
         session["flash"] = f"Configuration enregistrée (fournisseur : {label}), mais aucune clé API n'est définie pour ce fournisseur."
         session["flash_ok"] = False
     else:

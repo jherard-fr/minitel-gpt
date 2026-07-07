@@ -4,11 +4,11 @@ Transformer un **Minitel** (testé sur **Minitel 1 Telic / Alcatel** et
 **Minitel 2**) en terminal de chat IA autonome, piloté par un **Raspberry Pi
 Zero 2 W**.
 
-On tape sa question sur le clavier du Minitel, le Pi interroge le modèle d'IA
-choisi - **Mistral** ou **Claude** - et affiche la réponse à l'écran, à 1200
-bauds. Le fournisseur, la clé et le modèle se règlent depuis l'interface web,
-tout comme la personnalité de l'assistant (la version phare est « bloquée dans
-les années 80 »).
+On tape sa question sur le clavier du Minitel, le Pi interroge le fournisseur
+d'IA choisi - **Mistral**, **Claude**, ou **Linkup** en recherche web pure -
+et affiche la réponse à l'écran, à 1200 bauds. Le fournisseur, la clé et le
+modèle se règlent depuis l'interface web, tout comme la personnalité de
+l'assistant (la version phare est « bloquée dans les années 80 »).
 
 🌐 Présentation du projet : https://minitel-gpt.herard.com
 
@@ -145,17 +145,25 @@ activation des 3 services systemd.
 ### 4. Renseigner la clé API
 
 Aucun fichier à éditer à la main : ouvrir l'**admin web** (voir plus bas), onglet
-**Paramètres**, choisir le **fournisseur d'IA** (**Mistral** ou **Claude**) et
-coller la clé correspondante. Un menu propose pour chacun les modèles disponibles
-avec leur coût et leur pertinence.
+**Paramètres**, choisir le **fournisseur d'IA** (**Mistral**, **Claude** ou
+**Linkup**) et coller la clé correspondante. Un menu propose pour chacun les
+modèles (ou, pour Linkup, les profondeurs de recherche) disponibles avec leur
+coût et leur pertinence.
 
 - Clé **Mistral** : <https://admin.mistral.ai/organization/api-keys>
 - Clé **Claude** : <https://platform.claude.com/>
+- Clé **Linkup** : <https://app.linkup.so>
+
+> ⚠️ **Linkup** est un moteur de **recherche web**, pas un générateur de texte :
+> à la différence de Mistral et Claude, la personnalité (prompt système) et
+> l'historique de conversation ne s'appliquent pas dans ce mode. Chaque question
+> devient une recherche web isolée, dont la réponse sourcée sert de réponse du
+> terminal - utile pour une personnalité « actualités / infos factuelles ».
 
 > Le `.env` (créé automatiquement par l'installation) peut aussi être édité
 > directement, mais l'admin est plus simple. Variables disponibles :
-> `LLM_PROVIDER` (`mistral` ou `claude`), `MISTRAL_KEY`, `MISTRAL_MODEL`,
-> `ANTHROPIC_KEY`, `CLAUDE_MODEL`.
+> `LLM_PROVIDER` (`mistral`, `claude` ou `linkup`), `MISTRAL_KEY`, `MISTRAL_MODEL`,
+> `ANTHROPIC_KEY`, `CLAUDE_MODEL`, `LINKUP_KEY`, `LINKUP_DEPTH`.
 
 ### Mettre à jour le code (après installation)
 
@@ -177,7 +185,7 @@ sudo systemctl restart minitel-chatgpt admin-ui wifi-manager
 
 | Service | Rôle |
 |---|---|
-| `minitel-chatgpt` | Terminal : lit le clavier Minitel, interroge l'IA (Mistral ou Claude), affiche la réponse paginée |
+| `minitel-chatgpt` | Terminal : lit le clavier Minitel, interroge l'IA (Mistral, Claude ou Linkup), affiche la réponse paginée |
 | `wifi-manager` | Connexion WiFi autonome + hotspot de provisioning (portail captif) |
 | `admin-ui` | Interface web d'administration (port 8080) |
 
@@ -203,9 +211,9 @@ Trois onglets :
   prompt par IA, **fichiers de connaissance** (.txt) injectés dans le contexte,
   textes d'accueil personnalisables, **zone de test** pour essayer les requêtes
   sans le Minitel (mêmes prompt, connaissances et fournisseur d'IA)
-- **Paramètres** : choix du **fournisseur d'IA** (Mistral ou Claude) avec la clé
-  et le modèle de chacun (coût + pertinence indiqués), **mise à jour de
-  l'application**, logs
+- **Paramètres** : choix du **fournisseur d'IA** (Mistral, Claude ou Linkup) avec
+  la clé et le modèle (ou la profondeur de recherche) de chacun (coût + pertinence
+  indiqués), **mise à jour de l'application**, logs
 
 Les personnalités sont stockées dans `config/prompts.json`, leurs fichiers de
 connaissance dans `config/knowledge/<personnalité>/`.
@@ -247,7 +255,7 @@ L'adresse de l'admin est aussi consultable **sur le Minitel via la touche Guide*
 
 ```
 services/
-  minitel_chatgpt.py   terminal (boucle de chat, appel Mistral)
+  minitel_chatgpt.py   terminal (boucle de chat, appel Mistral/Claude/Linkup)
   minitel_serial.py    abstraction série
   wifi_manager.py      provisioning WiFi + portail captif
   admin_ui.py          interface web d'admin

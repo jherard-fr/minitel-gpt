@@ -51,8 +51,8 @@ CONTENT_ROWS = 18          # lignes de contenu par page de réponse
 IDLE_TIMEOUT = 300         # 5 min → retour sommaire
 
 # ── Fournisseur d'IA (LLM) ───────────────────────────────────────────────
-# LLM_PROVIDER = "mistral" (defaut) ou "claude". La cle et le modele de chaque
-# fournisseur sont independants ; on bascule sans perdre l'autre configuration.
+# LLM_PROVIDER = "mistral" (defaut), "claude" ou "linkup". La cle et le modele
+# de chaque fournisseur sont independants ; on bascule sans perdre les autres.
 PROVIDER = os.getenv("LLM_PROVIDER", "mistral").strip().lower()
 
 MISTRAL_KEY = os.environ.get("MISTRAL_KEY", "")
@@ -65,8 +65,15 @@ ANTHROPIC_KEY = os.environ.get("ANTHROPIC_KEY", "")
 CLAUDE_MODEL = os.getenv("CLAUDE_MODEL", "claude-haiku-4-5")
 ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
 
-# Modele effectivement utilise (pour les logs)
-MODEL = CLAUDE_MODEL if PROVIDER == "claude" else MISTRAL_MODEL
+# Linkup (recherche web agentique) - PAS un generateur de texte : pas de
+# prompt systeme ni d'historique multi-tours, chaque question devient une
+# recherche web isolee dont la reponse sourcee sert de "reponse" du terminal.
+LINKUP_KEY = os.environ.get("LINKUP_KEY", "")
+LINKUP_DEPTH = os.getenv("LINKUP_DEPTH", "standard")
+LINKUP_URL = "https://api.linkup.so/v1/search"
+
+# Modele/mode effectivement utilise (pour les logs)
+MODEL = {"claude": CLAUDE_MODEL, "linkup": LINKUP_DEPTH}.get(PROVIDER, MISTRAL_MODEL)
 PROMPTS_FILE = Path(__file__).parent.parent / "config" / "prompts.json"
 PROMPTS_DEFAULT = Path(__file__).parent.parent / "config" / "prompts.default.json"
 
@@ -111,10 +118,38 @@ def call_claude(system_prompt, history):
                    if b.get("type") == "text").strip()
 
 
+def call_linkup(system_prompt, history):
+    """Interroge Linkup (recherche web agentique) et retourne une reponse sourcee.
+    Pas de prompt systeme ni d'historique pris en compte : seule la derniere
+    question de l'utilisateur sert de requete de recherche.
+    Note : la doc publique de Linkup decrit un GET avec parametres d'URL, mais
+    en pratique seul un POST avec un corps JSON fonctionne (verifie empiriquement,
+    le GET renvoie 404 "Cannot GET /v1/search")."""
+    question = next((m["content"] for m in reversed(history)
+                     if m.get("role") == "user"), "")
+    r = requests.post(
+        LINKUP_URL,
+        headers={"Authorization": f"Bearer {LINKUP_KEY}",
+                 "Content-Type": "application/json"},
+        json={"q": question, "depth": LINKUP_DEPTH, "outputType": "sourcedAnswer"},
+        timeout=40,
+    )
+    r.raise_for_status()
+    data = r.json()
+    answer = (data.get("answer") or "").strip()
+    sources = data.get("sources") or []
+    if sources:
+        noms = ", ".join(s.get("name") or s.get("url", "") for s in sources[:3])
+        answer += f"\n\nSources : {noms}"
+    return answer or "Aucun resultat trouve."
+
+
 def call_llm(system_prompt, history):
     """Aiguille vers le fournisseur configure (LLM_PROVIDER)."""
     if PROVIDER == "claude":
         return call_claude(system_prompt, history)
+    if PROVIDER == "linkup":
+        return call_linkup(system_prompt, history)
     return call_mistral(system_prompt, history)
 
 
