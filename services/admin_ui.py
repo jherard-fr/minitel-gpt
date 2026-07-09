@@ -203,8 +203,21 @@ def llm_provider():
     p = read_env().get("LLM_PROVIDER", os.getenv("LLM_PROVIDER", "mistral")).strip().lower()
     return p if p in ("mistral", "claude", "linkup") else "mistral"
 
+def is_real_key(k):
+    """Heuristique : une vraie clé API fait au moins 10 caractères et n'est pas
+    un simple texte de substitution (les "..." de config/env.example, jamais
+    remplacés). Évite d'afficher "(définie)" pour un placeholder inexploitable."""
+    k = (k or "").strip()
+    if len(k) < 10:
+        return False
+    if set(k) <= {"."}:
+        return False
+    return True
+
 def mask_key(k):
-    return (k[:6] + "..." + k[-4:]) if len(k) > 12 else ("(définie)" if k else "(absente)")
+    if not is_real_key(k):
+        return "(absente)"
+    return (k[:6] + "..." + k[-4:]) if len(k) > 12 else "(définie)"
 
 # Modèles proposés (id, libellé avec coût + pertinence). Le terminal n'affiche
 # que 40 colonnes et répond court → un modèle léger suffit largement.
@@ -364,7 +377,7 @@ def generate_prompt(description):
             "Mistral ou Claude pour générer les consignes.")
     if provider == "claude":
         key = anthropic_key()
-        if not key:
+        if not is_real_key(key):
             raise RuntimeError("Clé Claude absente")
         r = requests.post(
             "https://api.anthropic.com/v1/messages",
@@ -380,7 +393,7 @@ def generate_prompt(description):
                        if b.get("type") == "text").strip()
     # Mistral (défaut)
     key = mistral_key()
-    if not key:
+    if not is_real_key(key):
         raise RuntimeError("Clé Mistral absente")
     r = requests.post(
         "https://api.mistral.ai/v1/chat/completions",
@@ -400,7 +413,7 @@ def llm_answer(system_prompt, user_message):
     provider = llm_provider()
     if provider == "linkup":
         key = linkup_key()
-        if not key:
+        if not is_real_key(key):
             raise RuntimeError("Clé Linkup absente")
         # POST + corps JSON (la doc publique Linkup décrit un GET, mais en
         # pratique seul le POST fonctionne - vérifié empiriquement, voir
@@ -422,7 +435,7 @@ def llm_answer(system_prompt, user_message):
         return answer or "Aucun resultat trouve."
     if provider == "claude":
         key = anthropic_key()
-        if not key:
+        if not is_real_key(key):
             raise RuntimeError("Clé Claude absente")
         r = requests.post(
             "https://api.anthropic.com/v1/messages",
@@ -437,7 +450,7 @@ def llm_answer(system_prompt, user_message):
         return "".join(b.get("text", "") for b in blocks
                        if b.get("type") == "text").strip()
     key = mistral_key()
-    if not key:
+    if not is_real_key(key):
         raise RuntimeError("Clé Mistral absente")
     messages = [{"role": "system", "content": system_prompt}] + history
     r = requests.post(
@@ -505,7 +518,10 @@ textarea{resize:vertical;font-size:.85em;line-height:1.5}
 .toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .toolbar select{flex:1;min-width:180px}
 .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:8px}
-.on{background:var(--accent)}.off{background:#667}
+.on{background:var(--accent)}.off{background:#667}.warn{background:var(--danger)}
+.keystat{font-weight:bold}
+.clearkey{display:flex;align-items:center;gap:6px;font-size:.82em;color:var(--muted);margin-top:6px;font-weight:normal}
+.clearkey input{width:auto}
 .row{display:flex;align-items:center;margin:8px 0;font-size:.92em}
 .plist{list-style:none;padding:0;margin:0}
 .plist li{display:flex;align-items:center;gap:10px;padding:10px;border:1px solid var(--border);
@@ -662,8 +678,9 @@ hr{border:none;border-top:1px solid var(--border);margin:16px 0}
 
       <div style="border-left:3px solid var(--accent);padding-left:12px;margin-top:16px">
         <h3 style=margin-top:4px>Mistral</h3>
-        <label>Clé API Mistral <span class=sub>(actuelle : {{mistral_key_masked}})</span></label>
+        <label>Clé API Mistral <span class="dot {{'off' if mistral_key_masked=='(absente)' else 'on'}}"></span><span class="keystat" style="color:{{'var(--danger)' if mistral_key_masked=='(absente)' else 'var(--accent)'}}">{{mistral_key_masked}}</span></label>
         <input type=password name=mistral_key placeholder="clé Mistral... (vide = conserver l'actuelle)">
+        <label class=clearkey><input type=checkbox name=mistral_key_clear> Supprimer la clé existante</label>
         <p class=sub style=margin:6px 0 0>Pas encore de clé ?
           <a href="https://admin.mistral.ai/organization/api-keys" target=_blank rel=noopener>Créer une clé API Mistral &#8599;</a></p>
         <label>Modèle Mistral</label>
@@ -676,8 +693,9 @@ hr{border:none;border-top:1px solid var(--border);margin:16px 0}
 
       <div style="border-left:3px solid var(--accent);padding-left:12px;margin-top:16px">
         <h3 style=margin-top:4px>Claude (Anthropic)</h3>
-        <label>Clé API Claude <span class=sub>(actuelle : {{claude_key_masked}})</span></label>
+        <label>Clé API Claude <span class="dot {{'off' if claude_key_masked=='(absente)' else 'on'}}"></span><span class="keystat" style="color:{{'var(--danger)' if claude_key_masked=='(absente)' else 'var(--accent)'}}">{{claude_key_masked}}</span></label>
         <input type=password name=anthropic_key placeholder="clé Anthropic sk-ant-... (vide = conserver l'actuelle)">
+        <label class=clearkey><input type=checkbox name=anthropic_key_clear> Supprimer la clé existante</label>
         <p class=sub style=margin:6px 0 0>Pas encore de clé ?
           <a href="https://platform.claude.com/" target=_blank rel=noopener>Créer une clé API Claude &#8599;</a></p>
         <label>Modèle Claude</label>
@@ -690,8 +708,9 @@ hr{border:none;border-top:1px solid var(--border);margin:16px 0}
 
       <div style="border-left:3px solid var(--accent);padding-left:12px;margin-top:16px">
         <h3 style=margin-top:4px>Linkup (recherche web)</h3>
-        <label>Clé API Linkup <span class=sub>(actuelle : {{linkup_key_masked}})</span></label>
+        <label>Clé API Linkup <span class="dot {{'off' if linkup_key_masked=='(absente)' else 'on'}}"></span><span class="keystat" style="color:{{'var(--danger)' if linkup_key_masked=='(absente)' else 'var(--accent)'}}">{{linkup_key_masked}}</span></label>
         <input type=password name=linkup_key placeholder="clé Linkup... (vide = conserver l'actuelle)">
+        <label class=clearkey><input type=checkbox name=linkup_key_clear> Supprimer la clé existante</label>
         <p class=sub style=margin:6px 0 0>Pas encore de clé ?
           <a href="https://app.linkup.so" target=_blank rel=noopener>Créer une clé API Linkup &#8599;</a></p>
         <label>Profondeur de recherche</label>
@@ -854,6 +873,16 @@ async function testPreset(){
   spin.style.display='none';
 }
 loadPreset();
+// Desactive le champ mot de passe quand "Supprimer la cle existante" est coche
+document.querySelectorAll('.clearkey input[type=checkbox]').forEach(function(cb){
+  cb.addEventListener('change', function(){
+    const inp = this.closest('.clearkey').previousElementSibling;
+    if(inp && inp.type==='password'){
+      inp.disabled = this.checked;
+      if(this.checked) inp.value='';
+    }
+  });
+});
 </script>
 </body></html>"""
 
@@ -1050,15 +1079,29 @@ def save_llm():
         provider = "mistral"
     write_env_key("LLM_PROVIDER", provider)
 
-    # Clés : on n'écrase que si une nouvelle valeur est saisie.
+    # Clés : "supprimer" a priorité sur une nouvelle valeur saisie (ne devrait
+    # normalement pas arriver ensemble, mais on ne veut jamais réenregistrer une
+    # clé que l'admin vient d'effacer). Sans case cochée et champ vide : on
+    # n'écrase pas la clé existante.
+    mk_clear = request.form.get("mistral_key_clear") == "on"
     mk = request.form.get("mistral_key", "").strip()
-    if mk:
+    if mk_clear:
+        write_env_key("MISTRAL_KEY", "")
+    elif mk:
         write_env_key("MISTRAL_KEY", mk)
+
+    ak_clear = request.form.get("anthropic_key_clear") == "on"
     ak = request.form.get("anthropic_key", "").strip()
-    if ak:
+    if ak_clear:
+        write_env_key("ANTHROPIC_KEY", "")
+    elif ak:
         write_env_key("ANTHROPIC_KEY", ak)
+
+    lk_clear = request.form.get("linkup_key_clear") == "on"
     lk = request.form.get("linkup_key", "").strip()
-    if lk:
+    if lk_clear:
+        write_env_key("LINKUP_KEY", "")
+    elif lk:
         write_env_key("LINKUP_KEY", lk)
 
     # Modèles / profondeur : on ne retient qu'un identifiant connu.
@@ -1074,8 +1117,8 @@ def save_llm():
 
     restart_terminal()
     label = {"claude": "Claude", "linkup": "Linkup"}.get(provider, "Mistral")
-    key_present = {"claude": anthropic_key, "linkup": linkup_key,
-                   "mistral": mistral_key}[provider]()
+    key_present = is_real_key({"claude": anthropic_key, "linkup": linkup_key,
+                                "mistral": mistral_key}[provider]())
     if not key_present:
         session["flash"] = f"Configuration enregistrée (fournisseur : {label}), mais aucune clé API n'est définie pour ce fournisseur."
         session["flash_ok"] = False
