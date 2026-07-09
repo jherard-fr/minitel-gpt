@@ -766,7 +766,7 @@ function titleRowHtml(text, font){
   return '<div class="row tarow" style="gap:8px">'
     + '<input type=text name=tat_text value="'+esc+'" maxlength=16 style="flex:1" placeholder="Mot...">'
     + '<select name=tat_font style="flex:1">'+opts+'</select>'
-    + '<button class="btn btn-d" type=button onclick="this.closest(\'.tarow\').remove()" style="margin:0;padding:6px 12px">✕</button>'
+    + '<button class="btn btn-d" type=button onclick="this.parentElement.remove()" style="margin:0;padding:6px 12px">✕</button>'
     + '</div>';
 }
 function addTitleRow(text, font){
@@ -790,7 +790,7 @@ async function previewTitle(){
     const r=await fetch('/preview-title',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({segments:segments})});
     const j=await r.json();
     pre.textContent = j.ok
-      ? (j.lines.join('\n') + (j.truncated ? '\n\n(!) Tronque : trop de lignes pour l ecran, reduisez le nombre ou la taille des mots.' : ''))
+      ? (j.lines.join('\\n') + (j.truncated ? '\\n\\n(!) Tronque : trop de lignes pour l ecran, reduisez le nombre ou la taille des mots.' : ''))
       : ('Erreur : '+j.error);
   }catch(e){pre.textContent='Erreur : '+e;}
 }
