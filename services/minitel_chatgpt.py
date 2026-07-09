@@ -270,7 +270,11 @@ TITLE_ART_MAX_HEIGHT = 12   # garde-fou ecran (24 lignes au total sur le Minitel
 
 def build_title(title_art=None):
     """Rend l'animation ASCII d'accueil a partir des segments {text, font}.
-    Repli par segment si une police est invalide, repli global si pyfiglet
+    Repli par segment si une police est invalide OU si son rendu ne produit
+    aucun caractere ASCII visible (le paquet apt python3-pyfiglet, "+dfsg",
+    inclut des polices - block, mono, braille, emboss... - qui dessinent en
+    caracteres Unicode que to_ascii() supprime silencieusement : sans ce
+    garde-fou, ces polices donnaient un titre vide). Repli global si pyfiglet
     est indisponible."""
     segments = title_art or TITLE_ART_DEFAULT
     try:
@@ -286,9 +290,12 @@ def build_title(title_art=None):
         font = seg.get("font") or "standard"
         try:
             fig = Figlet(font=font, width=COLS)
-            for ln in fig.renderText(text).rstrip("\n").split("\n"):
-                if ln.strip():
-                    lines.append(ln[:COLS])
+            seg_lines = [ln[:COLS] for ln in fig.renderText(text).rstrip("\n").split("\n")
+                         if ln.strip()]
+            if seg_lines and not any(to_ascii(ln).strip() for ln in seg_lines):
+                log.warning(f"pyfiglet police '{font}': rendu non-ASCII, ignore")
+                continue
+            lines.extend(seg_lines)
         except Exception as e:
             log.warning(f"pyfiglet police '{font}': {e}")
     if not lines:

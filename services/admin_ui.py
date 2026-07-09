@@ -35,19 +35,27 @@ DEFAULTS = {
 # avec sa police/taille. Hauteurs mesurées empiriquement (nb de lignes ASCII
 # générées par pyfiglet) pour guider le choix sans déborder de l'écran Minitel
 # (24 lignes au total, dont les messages d'accueil et la saisie).
+#
+# IMPORTANT : le paquet apt python3-pyfiglet (installé par install.sh) est un
+# repackaging Debian "+dfsg" qui ne fournit que ~39 polices sur les ~250 de la
+# version pip complète (licences retirées) - et certaines d'entre elles (mono,
+# block, braille, emboss...) rendent en caractères Unicode que le filtre ASCII
+# du terminal supprime silencieusement, donnant un titre vide. Cette liste est
+# volontairement restreinte aux polices confirmées présentes ET 100% ASCII sur
+# le paquet apt (vérifié empiriquement le 2026-07-09, pyfiglet 1.0.3+dfsg-1).
 TITLE_FONTS = [
     ("digital",  "Digital - style LCD, très compact (~3 lignes)"),
     ("mini",     "Mini - très compact (~3 lignes)"),
-    ("straight", "Straight - compact (~3 lignes)"),
-    ("small",    "Small - petit, recommandé pour mots courts (~4 lignes)"),
-    ("chunky",   "Chunky - petit et gras (~4 lignes)"),
+    ("smshadow", "Small Shadow - très compact avec ombre (~3 lignes)"),
+    ("bubble",   "Bubble - petit, en bulles (~4 lignes)"),
     ("shadow",   "Shadow - petit avec ombre (~4 lignes)"),
-    ("thin",     "Thin - petit et fin (~4 lignes)"),
+    ("small",    "Small - petit, recommandé pour mots courts (~4 lignes)"),
+    ("smslant",  "Small Slant - petit et incliné (~4 lignes)"),
     ("standard", "Standard - taille moyenne (~5 lignes)"),
     ("slant",    "Slant - moyen, incliné (~5 lignes)"),
     ("script",   "Script - moyen, style manuscrit (~5 lignes)"),
+    ("letter",   "Letter - moyen, style pochoir (~5 lignes)"),
     ("big",      "Big - grand (~6 lignes)"),
-    ("doom",     "Doom - grand et dramatique (~6 lignes)"),
     ("banner",   "Banner - très grand, un seul mot conseillé (~7 lignes)"),
     ("block",    "Block - massif, un seul mot conseillé (~10 lignes)"),
 ]
