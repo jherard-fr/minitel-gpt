@@ -106,6 +106,19 @@ def to_minitel_ascii(s: str) -> str:
 app = Flask(__name__)
 app.secret_key = SECRET_KEY
 
+@app.after_request
+def no_cache(response):
+    """Empêche le navigateur de mettre en cache les pages/réponses de l'admin.
+    Sans ça, un rechargement simple (pas Ctrl+F5) peut resservir une version
+    JS/HTML périmée après une mise à jour - source de confusion vécue en
+    pratique (fonctionnalité "corrigée" côté serveur mais page jamais
+    rafraîchie côté navigateur). Les images statiques (/assets/) restent
+    cacheables normalement."""
+    if not request.path.startswith("/assets/"):
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+    return response
+
 # ── Helpers prompts ──────────────────────────────────────────────────────
 def ensure_prompts():
     """prompts.json est local (gitignoré) : recréé depuis prompts.default.json
