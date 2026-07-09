@@ -30,6 +30,54 @@ DEFAULTS = {
     "loading_msg": "Consultation en cours...",
 }
 
+# ── Animation d'accueil (titre ASCII pyfiglet) ────────────────────────────
+# Chaque personnalité compose son titre d'accueil : une liste de mots, chacun
+# avec sa police/taille. Hauteurs mesurées empiriquement (nb de lignes ASCII
+# générées par pyfiglet) pour guider le choix sans déborder de l'écran Minitel
+# (24 lignes au total, dont les messages d'accueil et la saisie).
+TITLE_FONTS = [
+    ("digital",  "Digital - style LCD, très compact (~3 lignes)"),
+    ("mini",     "Mini - très compact (~3 lignes)"),
+    ("straight", "Straight - compact (~3 lignes)"),
+    ("small",    "Small - petit, recommandé pour mots courts (~4 lignes)"),
+    ("chunky",   "Chunky - petit et gras (~4 lignes)"),
+    ("shadow",   "Shadow - petit avec ombre (~4 lignes)"),
+    ("thin",     "Thin - petit et fin (~4 lignes)"),
+    ("standard", "Standard - taille moyenne (~5 lignes)"),
+    ("slant",    "Slant - moyen, incliné (~5 lignes)"),
+    ("script",   "Script - moyen, style manuscrit (~5 lignes)"),
+    ("big",      "Big - grand (~6 lignes)"),
+    ("doom",     "Doom - grand et dramatique (~6 lignes)"),
+    ("banner",   "Banner - très grand, un seul mot conseillé (~7 lignes)"),
+    ("block",    "Block - massif, un seul mot conseillé (~10 lignes)"),
+]
+TITLE_FONT_IDS = {f[0] for f in TITLE_FONTS}
+TITLE_ART_MAX_WORDS = 5     # nb max de mots composables dans le titre
+TITLE_ART_MAX_HEIGHT = 12   # nb max de lignes ASCII rendues (garde-fou écran)
+TITLE_ART_DEFAULT = [{"text": "MINITEL", "font": "small"}, {"text": "GPT", "font": "standard"}]
+
+def render_title_art(segments):
+    """Rend des segments {text,font} en ASCII via pyfiglet (utilisé pour
+    l'aperçu admin). Retourne (lignes, tronqué)."""
+    try:
+        from pyfiglet import Figlet
+    except Exception as e:
+        raise RuntimeError(f"pyfiglet indisponible sur ce serveur ({e})")
+    lines = []
+    for seg in segments[:TITLE_ART_MAX_WORDS]:
+        text = (seg.get("text") or "").strip()
+        if not text:
+            continue
+        font = seg.get("font") or "standard"
+        if font not in TITLE_FONT_IDS:
+            font = "standard"
+        fig = Figlet(font=font, width=40)
+        for ln in fig.renderText(text).rstrip("\n").split("\n"):
+            if ln.strip():
+                lines.append(ln)
+    truncated = len(lines) > TITLE_ART_MAX_HEIGHT
+    return lines[:TITLE_ART_MAX_HEIGHT], truncated
+
 # Caractères affichés sur le Minitel → nettoyage ASCII (le Minitel ne gère pas
 # les accents ni les caractères spéciaux). Appliqué à la sauvegarde des presets.
 _ASCII_REPL = {
@@ -74,6 +122,7 @@ def normalized_presets(data):
         merged.update(p)
         merged.setdefault("system", "")
         merged.setdefault("label", k)
+        merged.setdefault("title_art", TITLE_ART_DEFAULT)
         out[k] = merged
     return out
 
@@ -543,6 +592,16 @@ hr{border:none;border-top:1px solid var(--border);margin:16px 0}
       <input type=text name=loading_msg id=floading maxlength=40>
       <label>Prompt système (consignes de l'IA)</label>
       <textarea name=system_prompt id=fsystem rows=12></textarea>
+
+      <label>🎨 Animation d'accueil (titre ASCII)</label>
+      <p class=sub>Composez le titre affiché à l'allumage : un ou plusieurs mots,
+        chacun avec sa police/taille (jusqu'à {{title_art_max}} mots). Aucun mot =
+        titre par défaut « MINITEL GPT ».</p>
+      <div id=titleArtRows></div>
+      <button class="btn btn-s" type=button onclick=addTitleRow()>+ Ajouter un mot</button>
+      <button class="btn btn-s" type=button onclick=previewTitle()>👁 Aperçu</button>
+      <pre id=titlePreview style="display:none"></pre>
+
       <hr>
       <button class="btn btn-p">💾 Enregistrer</button>
       <button class="btn btn-s" formaction=/apply-preset>✓ Activer</button>
@@ -680,6 +739,8 @@ hr{border:none;border-top:1px solid var(--border);margin:16px 0}
 const PRESETS = {{presets_json|safe}};
 const ACTIVE = {{active_key|tojson}};
 const KNOWLEDGE = {{knowledge_json|safe}};
+const TITLE_FONTS = {{title_fonts_json|safe}};
+const TITLE_ART_MAX = {{title_art_max}};
 // Onglets
 document.querySelectorAll('nav.tabs button').forEach(b=>{
   b.onclick=()=>{
@@ -696,6 +757,43 @@ document.querySelectorAll('nav.tabs button').forEach(b=>{
     document.querySelectorAll('.panel').forEach(x=>x.classList.toggle('active',x.id===t));
   }})();
 // Editeur
+function titleRowHtml(text, font){
+  var opts='';
+  TITLE_FONTS.forEach(function(f){
+    opts += '<option value="'+f[0]+'"'+(f[0]===font?' selected':'')+'>'+f[1]+'</option>';
+  });
+  var esc=(text||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+  return '<div class="row tarow" style="gap:8px">'
+    + '<input type=text name=tat_text value="'+esc+'" maxlength=16 style="flex:1" placeholder="Mot...">'
+    + '<select name=tat_font style="flex:1">'+opts+'</select>'
+    + '<button class="btn btn-d" type=button onclick="this.closest(\'.tarow\').remove()" style="margin:0;padding:6px 12px">✕</button>'
+    + '</div>';
+}
+function addTitleRow(text, font){
+  text=text||''; font=font||'standard';
+  const wrap=document.getElementById('titleArtRows');
+  if(wrap.querySelectorAll('.tarow').length>=TITLE_ART_MAX){alert('Maximum '+TITLE_ART_MAX+' mots.');return;}
+  wrap.insertAdjacentHTML('beforeend', titleRowHtml(text, font));
+}
+async function previewTitle(){
+  const rows=document.querySelectorAll('#titleArtRows .tarow');
+  const segments=[];
+  rows.forEach(function(r){
+    const text=r.querySelector('input[name=tat_text]').value.trim();
+    const font=r.querySelector('select[name=tat_font]').value;
+    if(text) segments.push({text:text,font:font});
+  });
+  const pre=document.getElementById('titlePreview');
+  if(!segments.length){alert('Ajoutez au moins un mot');return;}
+  pre.style.display='block'; pre.textContent='...';
+  try{
+    const r=await fetch('/preview-title',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({segments:segments})});
+    const j=await r.json();
+    pre.textContent = j.ok
+      ? (j.lines.join('\n') + (j.truncated ? '\n\n(!) Tronque : trop de lignes pour l ecran, reduisez le nombre ou la taille des mots.' : ''))
+      : ('Erreur : '+j.error);
+  }catch(e){pre.textContent='Erreur : '+e;}
+}
 function loadPreset(){
   const k=document.getElementById('presetSel').value, p=PRESETS[k]; if(!p)return;
   fkey.value=k; flabel.value=p.label||''; ftitle.value=p.title_msg||'';
@@ -703,6 +801,11 @@ function loadPreset(){
   document.getElementById('activeInfo').textContent=
     (k===ACTIVE)?'● Personnalité actuellement active sur le Minitel.'
                 :'Personnalité inactive. Cliquez « Activer » pour l\\'utiliser.';
+  // Animation d'accueil (titre ASCII)
+  document.getElementById('titleArtRows').innerHTML='';
+  const art=(p.title_art&&p.title_art.length)?p.title_art:[{text:'MINITEL',font:'small'},{text:'GPT',font:'standard'}];
+  art.forEach(function(seg){addTitleRow(seg.text, seg.font);});
+  document.getElementById('titlePreview').style.display='none';
   // Fichiers de connaissance du preset
   document.getElementById('kkey').value=k;
   document.getElementById('kpresetname').textContent=p.label||k;
@@ -786,6 +889,7 @@ def index():
     return render_template_string(
         ADMIN_HTML, presets=presets, presets_json=json.dumps(presets),
         knowledge_json=json.dumps(all_knowledge()),
+        title_fonts_json=json.dumps(TITLE_FONTS), title_art_max=TITLE_ART_MAX_WORDS,
         active_key=data["active"], services=services, ip=ip_address(),
         log_chatgpt=log_tail("chatgpt"),
         provider=llm_provider(),
@@ -797,6 +901,24 @@ def index():
         version=current_version(), update_log=session.pop("update_log", None),
         flash=flash, flash_ok=flash_ok)
 
+def parse_title_art_form():
+    """Lit les champs tat_text[]/tat_font[] du formulaire (animation d'accueil)
+    et retourne une liste de segments {text,font} validés (mots vides ignorés,
+    police invalide -> "standard", plafonné à TITLE_ART_MAX_WORDS)."""
+    texts = request.form.getlist("tat_text")
+    fonts = request.form.getlist("tat_font")
+    segments = []
+    for text, font in zip(texts, fonts):
+        text = to_minitel_ascii(text.strip())[:16]
+        if not text:
+            continue
+        if font not in TITLE_FONT_IDS:
+            font = "standard"
+        segments.append({"text": text, "font": font})
+        if len(segments) >= TITLE_ART_MAX_WORDS:
+            break
+    return segments
+
 @app.route("/save-prompt", methods=["POST"])
 @require_login
 def save_prompt():
@@ -807,6 +929,7 @@ def save_prompt():
     p["title_msg"] = to_minitel_ascii(request.form.get("title_msg", DEFAULTS["title_msg"]))[:40]
     p["question_msg"] = to_minitel_ascii(request.form.get("question_msg", DEFAULTS["question_msg"]))[:40]
     p["loading_msg"] = to_minitel_ascii(request.form.get("loading_msg", DEFAULTS["loading_msg"]))[:40]
+    p["title_art"] = parse_title_art_form() or TITLE_ART_DEFAULT
     sp = request.form.get("system_prompt", "").strip()
     if sp:
         p["system"] = sp
@@ -829,6 +952,7 @@ def apply_preset():
             p["title_msg"] = to_minitel_ascii(request.form.get("title_msg", DEFAULTS["title_msg"]))[:40]
             p["question_msg"] = to_minitel_ascii(request.form.get("question_msg", DEFAULTS["question_msg"]))[:40]
             p["loading_msg"] = to_minitel_ascii(request.form.get("loading_msg", DEFAULTS["loading_msg"]))[:40]
+            p["title_art"] = parse_title_art_form() or TITLE_ART_DEFAULT
             if request.form.get("system_prompt", "").strip():
                 p["system"] = request.form.get("system_prompt").strip()
         data["active"] = k
@@ -837,6 +961,16 @@ def apply_preset():
         session["flash"] = f"Personnalité '{p.get('label', k)}' activée."
         session["flash_ok"] = True
     return redirect(url_for("index"))
+
+@app.route("/preview-title", methods=["POST"])
+@require_login
+def preview_title_route():
+    segments = (request.json or {}).get("segments") or []
+    try:
+        lines, truncated = render_title_art(segments)
+        return jsonify(ok=True, lines=lines, truncated=truncated)
+    except Exception as e:
+        return jsonify(ok=False, error=str(e))
 
 @app.route("/new-preset", methods=["POST"])
 @require_login

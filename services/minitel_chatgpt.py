@@ -232,8 +232,10 @@ def load_knowledge(active_key):
 
 
 def load_preset():
-    """Retourne (system, title_msg, question_msg, loading_msg).
-    Le system inclut les fichiers de connaissance du preset s'il y en a."""
+    """Retourne (system, title_msg, question_msg, loading_msg, title_art).
+    Le system inclut les fichiers de connaissance du preset s'il y en a.
+    title_art est la liste de segments {text, font} qui composent l'animation
+    ASCII d'accueil (voir admin, onglet Personnalites)."""
     try:
         ensure_prompts()
         data = json.load(open(PROMPTS_FILE))
@@ -249,29 +251,49 @@ def load_preset():
             p.get("title_msg", "*** MINITEL GPT ***"),
             p.get("question_msg", "Posez votre question :"),
             p.get("loading_msg", "Consultation en cours..."),
+            p.get("title_art") or TITLE_ART_DEFAULT,
         )
     except Exception as e:
         log.warning(f"prompts.json: {e}")
         return (FALLBACK_PROMPT, "*** MINITEL GPT ***",
-                "Posez votre question :", "Consultation en cours...")
+                "Posez votre question :", "Consultation en cours...", TITLE_ART_DEFAULT)
 
 
 # ── ASCII title (pyfiglet) ───────────────────────────────────────────────
-def build_title():
+# Chaque preset peut composer son propre titre d'accueil : une liste de
+# segments {text, font}, chacun rendu via pyfiglet (voir admin, onglet
+# Personnalites, pour la liste des polices proposees et l'apercu). A defaut
+# (preset sans title_art, ou cree avant cette fonctionnalite), on retombe sur
+# le titre historique "MINITEL" + "GPT".
+TITLE_ART_DEFAULT = [{"text": "MINITEL", "font": "small"}, {"text": "GPT", "font": "standard"}]
+TITLE_ART_MAX_HEIGHT = 12   # garde-fou ecran (24 lignes au total sur le Minitel)
+
+def build_title(title_art=None):
+    """Rend l'animation ASCII d'accueil a partir des segments {text, font}.
+    Repli par segment si une police est invalide, repli global si pyfiglet
+    est indisponible."""
+    segments = title_art or TITLE_ART_DEFAULT
     try:
         from pyfiglet import Figlet
-        lines = []
-        for word, font in [("MINITEL", "small"), ("GPT", "standard")]:
+    except Exception as e:
+        log.warning(f"pyfiglet indisponible: {e}")
+        return ["", "  " + "   ".join(" ".join(s.get("text", "")) for s in segments), ""]
+    lines = []
+    for seg in segments:
+        text = (seg.get("text") or "").strip()
+        if not text:
+            continue
+        font = seg.get("font") or "standard"
+        try:
             fig = Figlet(font=font, width=COLS)
-            for ln in fig.renderText(word).rstrip("\n").split("\n"):
+            for ln in fig.renderText(text).rstrip("\n").split("\n"):
                 if ln.strip():
                     lines.append(ln[:COLS])
-        return lines
-    except Exception as e:
-        log.warning(f"pyfiglet: {e}")
-        return ["", "    M I N I T E L   G P T", ""]
-
-TITLE_LINES = build_title()
+        except Exception as e:
+            log.warning(f"pyfiglet police '{font}': {e}")
+    if not lines:
+        lines = ["", "  " + "   ".join(" ".join(s.get("text", "")) for s in segments), ""]
+    return lines[:TITLE_ART_MAX_HEIGHT]
 
 
 # ── Serial helpers ───────────────────────────────────────────────────────
@@ -354,11 +376,11 @@ def wrap(text, width=COLS):
 
 
 # ── Écrans ───────────────────────────────────────────────────────────────
-def show_home(t: Term, title_msg, question_msg):
+def show_home(t: Term, title_lines, title_msg, question_msg):
     t.clear()
     t.w(bytes([CR, LF]))
     t.w(FG_CYAN)
-    for ln in TITLE_LINES:
+    for ln in title_lines:
         t.center(ln)
     t.w(bytes([CR, LF, CR, LF]))      # 2 lignes après le logo
     t.w(FG_YELLOW)
@@ -457,9 +479,10 @@ def run():
 
     while True:  # boucle sommaire
         # Recharger le preset à chaque retour au sommaire (prise en compte des édits)
-        system_prompt, title_msg, question_msg, loading_msg = load_preset()
+        system_prompt, title_msg, question_msg, loading_msg, title_art = load_preset()
+        title_lines = build_title(title_art)
         history = []
-        show_home(t, title_msg, question_msg)
+        show_home(t, title_lines, title_msg, question_msg)
 
         while True:  # boucle conversation
             question, action = read_question(t)
