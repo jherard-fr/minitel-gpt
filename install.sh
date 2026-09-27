@@ -12,7 +12,9 @@ echo "=== MINITEL GPT - Installation ==="
 
 # ── Dépendances système ─────────────────────────────────────────────────────
 echo "[1/7] Paquets système..."
-apt-get update -q
+# Hors ligne (installation au 1er boot avant saisie du WiFi via le portail
+# captif), les paquets sont pré-installés depuis des .deb : l'update peut échouer.
+apt-get update -q || echo "      (pas de réseau : index apt non mis à jour)"
 apt-get install -y \
   git \
   python3-serial python3-requests python3-flask python3-dotenv python3-pip \
