@@ -36,6 +36,10 @@ fi
 echo "[3/7] Nettoyage dnsmasq système..."
 systemctl disable --now dnsmasq 2>/dev/null || true
 # NetworkManager utilise son propre dnsmasq-base interne pour le hotspot.
+# Portail captif : en hotspot, toute requête DNS renvoie 192.168.4.1, sinon le
+# téléphone ne détecte pas le portail et ne l'ouvre pas tout seul.
+mkdir -p /etc/NetworkManager/dnsmasq-shared.d
+cp "$PROJ_DIR/config/dnsmasq-shared-captive.conf" /etc/NetworkManager/dnsmasq-shared.d/minitel-captive.conf
 
 # ── Permissions port série + répertoires ────────────────────────────────────
 echo "[4/7] Permissions et répertoires..."
