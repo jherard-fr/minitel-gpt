@@ -109,7 +109,11 @@ def call_claude(system_prompt, history):
                  "anthropic-version": "2023-06-01",
                  "content-type": "application/json"},
         json={"model": CLAUDE_MODEL, "max_tokens": 700,
-              "system": system_prompt, "messages": history},
+              "system": system_prompt, "messages": history,
+              # Claude 5.x : thinking adaptatif par défaut -> effort bas pour
+              # une réponse rapide ; Haiku 4.5 refuse ce paramètre.
+              **({} if CLAUDE_MODEL.startswith("claude-haiku")
+                 else {"output_config": {"effort": "low"}})},
         timeout=30,
     )
     r.raise_for_status()

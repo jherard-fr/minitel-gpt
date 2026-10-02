@@ -249,10 +249,16 @@ MISTRAL_MODELS = [
     ("mistral-large-latest", "Mistral Large - le plus pertinent (~2 $/M entrée)"),
 ]
 CLAUDE_MODELS = [
-    ("claude-haiku-4-5",  "Claude Haiku 4.5 - le moins cher, rapide, recommandé (1 $ / 5 $ par M)"),
-    ("claude-sonnet-4-6", "Claude Sonnet 4.6 - équilibre vitesse/intelligence (3 $ / 15 $ par M)"),
-    ("claude-opus-4-8",   "Claude Opus 4.8 - le plus pertinent, plus cher (5 $ / 25 $ par M)"),
+    ("claude-haiku-4-5",  "Claude Haiku 4.5 - le moins cher, le plus rapide, recommandé (1 $ / 5 $ par M)"),
+    ("claude-sonnet-5-5", "Claude Sonnet 5.5 - équilibre vitesse/intelligence (2 $ / 10 $ par M)"),
+    ("claude-opus-5-5",   "Claude Opus 5.5 - le plus pertinent, plus lent (4 $ / 20 $ par M)"),
 ]
+
+def claude_options(model):
+    """Paramètres propres au modèle : les Claude 5.x réfléchissent par défaut
+    (thinking adaptatif) ; effort bas = réponse rapide et courte, adaptée au
+    Minitel. Haiku 4.5 ne connaît pas ce paramètre (erreur 400)."""
+    return {} if model.startswith("claude-haiku") else {"output_config": {"effort": "low"}}
 # Linkup n'est pas un LLM generatif mais un moteur de recherche web : la
 # "profondeur" remplace le modele. Tarifs : ~0,005 $ (fast/standard) ou
 # ~0,006 $ (deep) par recherche.
@@ -405,7 +411,8 @@ def generate_prompt(description):
             headers={"x-api-key": key, "anthropic-version": "2023-06-01",
                      "content-type": "application/json"},
             json={"model": claude_model(), "max_tokens": 1500,
-                  "messages": [{"role": "user", "content": meta}]},
+                  "messages": [{"role": "user", "content": meta}],
+                  **claude_options(claude_model())},
             timeout=45,
         )
         r.raise_for_status()
@@ -463,7 +470,8 @@ def llm_answer(system_prompt, user_message):
             headers={"x-api-key": key, "anthropic-version": "2023-06-01",
                      "content-type": "application/json"},
             json={"model": claude_model(), "max_tokens": 700,
-                  "system": system_prompt, "messages": history},
+                  "system": system_prompt, "messages": history,
+                  **claude_options(claude_model())},
             timeout=45,
         )
         r.raise_for_status()
