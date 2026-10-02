@@ -326,7 +326,7 @@ async function connectWifi(e) {
     + '<p>Le Minitel se connecte a <b>' + ssid + '</b>.</p>'
     + '<p>Ce reseau de configuration va se fermer dans quelques secondes.<br>'
     + 'Reconnectez votre telephone a votre WiFi habituel.</p>'
-    + '<p style="color:#aaa;margin-top:20px">Vous recevrez un email avec la nouvelle adresse du Minitel.</p></div>';
+    + '<p style="color:#aaa;margin-top:20px">Pour retrouver la nouvelle adresse du Minitel, appuyez sur sa touche GUIDE.</p></div>';
 }
 </script>
 </body>
