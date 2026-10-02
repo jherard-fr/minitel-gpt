@@ -134,10 +134,18 @@ sudo systemctl restart minitel-chatgpt admin-ui wifi-manager
 clé API depuis l'admin (étape 4).
 
 Le script `install.sh` se charge de **tout** : paquets système, dépendance Python
-`pyfiglet`, désactivation du `dnsmasq` système (conflit hotspot), groupe
-`dialout` (accès au port série FTDI), création de `config/prompts.json` et d'un
-`.env` par défaut s'ils manquent, règle sudo (l'admin redémarre les services), et
-activation des 3 services systemd.
+`pyfiglet` **et ses polices** (`figlet`, `toilet-fonts` : sur Raspberry Pi OS
+Trixie, `python3-pyfiglet` est livré sans aucune police), désactivation du
+`dnsmasq` système (conflit hotspot), **redirection DNS du portail captif**
+(`config/dnsmasq-shared-captive.conf` copié dans
+`/etc/NetworkManager/dnsmasq-shared.d/`, sans quoi le téléphone n'ouvre pas le
+portail tout seul), groupe `dialout` (accès au port série FTDI), création de
+`config/prompts.json` et d'un `.env` par défaut s'ils manquent, règle sudo
+(l'admin redémarre les services), et activation des 3 services systemd.
+
+> Le script tolère l'absence de réseau (`apt-get update` en échec non bloquant) :
+> il peut tourner hors ligne si les paquets ont été pré-installés, par exemple
+> au premier démarrage d'une carte préparée à l'avance.
 
 > Le dossier est un **clone git**, ce qui permet la mise à jour en un clic depuis
 > l'admin (onglet **Paramètres**). Ne pas remplacer les fichiers à la main.
@@ -153,6 +161,24 @@ coût et leur pertinence.
 - Clé **Mistral** : <https://admin.mistral.ai/organization/api-keys>
 - Clé **Claude** : <https://platform.claude.com/>
 - Clé **Linkup** : <https://app.linkup.so>
+
+Modèles Claude proposés (prix entrée / sortie par million de tokens) :
+
+| Modèle | Prix | Usage |
+|---|---|---|
+| Claude Haiku 4.5 | 1 $ / 5 $ | le moins cher et le plus rapide, recommandé |
+| Claude Sonnet 5.5 | 2 $ / 10 $ | équilibre vitesse / intelligence |
+| Claude Opus 5.5 | 4 $ / 20 $ | le plus pertinent, un peu plus lent |
+
+> Sonnet 5.5 et Opus 5.5 réfléchissent par défaut avant de répondre : le terminal
+> leur fixe un effort **bas** (`output_config.effort = low`) pour garder des
+> réponses rapides et courtes (2 à 4 s mesurées depuis un Pi Zero W).
+
+> ⚠️ **Mistral : « erreur de connexion » avec une clé pourtant valide** - si
+> l'API répond `429 Rate limit exceeded` avec une limite de **0 requête/minute**,
+> aucune offre n'est activée sur l'espace de travail de la clé. Activer l'offre
+> gratuite *Experiment* (ou *Scale*) dans <https://admin.mistral.ai>, rubrique
+> Billing, puis patienter quelques minutes.
 
 > ⚠️ **Linkup** est un moteur de **recherche web**, pas un générateur de texte :
 > à la différence de Mistral et Claude, la personnalité (prompt système) et
@@ -249,6 +275,9 @@ L'adresse de l'admin est aussi consultable **sur le Minitel via la touche Guide*
   `MinitelGPT-Setup`** (IP `192.168.4.1`).
 - Se connecter au hotspot ouvre automatiquement le **portail captif** :
   on choisit le réseau du lieu, le Pi s'y connecte et coupe le hotspot.
+  L'ouverture automatique repose sur la redirection DNS installée par
+  `install.sh` ; à défaut, ouvrir `http://192.168.4.1` dans le navigateur du
+  téléphone (et accepter de rester connecté à un réseau « sans internet »).
 - L'IP du Pi est ensuite consultable sur le Minitel (touche **Guide**).
 
 ---
@@ -262,7 +291,9 @@ services/
   wifi_manager.py      provisioning WiFi + portail captif
   admin_ui.py          interface web d'admin
 config/
-  prompts.json         personnalités
+  prompts.json         personnalités (local, hors git)
+  prompts.default.json personnalités par défaut (copiées si prompts.json absent)
+  dnsmasq-shared-captive.conf  redirection DNS du portail captif
   knowledge/           fichiers .txt par personnalité
   *.service            unités systemd
   minitel-gpt-sudoers  règle sudo pour l'admin
@@ -279,7 +310,10 @@ install.sh             installation
 | Minitel 2 : écran d'accueil vide après `Fnct + Sommaire` | normal - appuyer sur `Sommaire` pour afficher MINITEL GPT |
 | Affichage 80 colonnes qui défile sans pagination | Minitel 2 passé en mode téléinformatique via `Fnct + T A` - éviter cette combinaison (rester en `Fnct + Sommaire`) |
 | Charabia à l'écran | vitesse Pi ≠ vitesse Minitel (rester à 1200 bauds des deux côtés) |
-| Le hotspot n'apparaît pas | service `dnsmasq` système actif (port 53) → le désactiver |
+| Le hotspot n'apparaît pas | service `dnsmasq` système actif (port 53) → le désactiver ; au tout premier démarrage, patienter 5 à 10 min (installation + redémarrage) |
+| Hotspot visible mais le portail ne s'ouvre pas tout seul | `/etc/NetworkManager/dnsmasq-shared.d/minitel-captive.conf` absent → relancer `sudo bash install.sh` (ou ouvrir `http://192.168.4.1`) |
+| Aperçu du titre d'accueil : « Erreur » avec le nom de la police | polices figlet absentes → `sudo apt install figlet toilet-fonts` (fait par `install.sh`) |
+| Mistral : « erreur de connexion » | voir la note 429 de l'étape 4 (offre Mistral non activée) |
 | Caractères doublés à la saisie | écho local du Minitel + écho logiciel (ne pas ré-écho côté Pi) |
 | Touches de fonction sans effet | Minitel 2 en mode téléinfo (touches VT100, gérées) ou octet `0x13` isolé (corrigé) |
 
