@@ -18,12 +18,15 @@ apt-get update -q || echo "      (pas de réseau : index apt non mis à jour)"
 apt-get install -y \
   git \
   python3-serial python3-requests python3-flask python3-dotenv python3-pip \
-  dnsmasq-base iw minicom
+  dnsmasq-base iw minicom \
+  figlet toilet-fonts
 #   git         : mise à jour de l'app depuis l'admin web (git fetch/reset)
 #   python3-*   : pyserial (port Minitel), requests (Mistral), flask + dotenv (admin)
 #   python3-pip : repli pour pyfiglet (absent par défaut sur Pi OS Lite)
 #   dnsmasq-base + iw : hotspot WiFi de provisioning
 #   minicom     : utilitaire de debug série (optionnel)
+#   figlet + toilet-fonts : polices du titre ASCII. Sur Trixie, python3-pyfiglet
+#               est livré SANS police (simples Recommends) -> aperçu en erreur.
 
 # ── Dépendances Python (pyfiglet : titre ASCII de l'accueil) ────────────────
 echo "[2/7] Paquets Python..."
